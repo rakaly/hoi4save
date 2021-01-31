@@ -251,7 +251,6 @@ fn month_day_from_julian(days_since_jan1: i32) -> (u8, u8) {
     (month, day as u8)
 }
 
-#[cfg(feature = "derive")]
 mod datederive {
     use super::Date;
     use serde::{de, de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
@@ -307,6 +306,3 @@ mod datederive {
         }
     }
 }
-
-#[cfg(not(feature = "derive"))]
-mod datederive {}
