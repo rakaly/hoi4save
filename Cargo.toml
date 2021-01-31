@@ -3,6 +3,13 @@ name = "hoi4save"
 version = "0.1.0"
 authors = ["Nick Babcock <nbabcock19@hotmail.com>"]
 edition = "2018"
+exclude = ["/assets/*", "/fuzz/*"]
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/rakaly/hoi4save.git"
+description = "Ergonomically work with HOI4 saves"
+keywords = ["hoi4", "ironman"]
+categories = ["parsing"]
 
 [dependencies]
 jomini = "0.8"
@@ -12,14 +19,6 @@ serde = { version = "1", features = ["derive"] }
 zip = { version =  "0.5", default-features = false, features = ["deflate"] }
 attohttpc = "0.16"
 
-# We override the test profile so that our tests run in a tolerable time as
-# some of the asset files are heavyweight and can take a significant amount of
-# time. Here is some timing data recorded to run one test:
-#
-# cargo test                 0m15.037s
-# cargo test (opt-level=3)   0m9.644s
-# cargo test (+lto=thin)     0m0.907s
-# cargo test --release       0m0.620s
 [profile.test]
 opt-level = 3
 lto = "thin"
