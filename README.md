@@ -5,13 +5,21 @@
 HOI4 Save is a library to ergonomically work with Hearts of Iron IV saves (plaintext + binary).
 
 ```rust,ignore
-use hoi4save::{ImperatorExtractor, Encoding};
-use std::io::Cursor;
+use hoi4save::{Hoi4Extractor, Encoding};
 
 let data = std::fs::read("assets/saves/1.10-normal-text.hoi4")?;
-let (save, encoding) = ImperatorExtractor::extract_save(&data[..])?;
+let (save, encoding) = Hoi4Extractor::extract_save(&data[..])?;
 assert_eq!(encoding, Encoding::Plaintext);
 assert_eq!(save.player, String::from("FRA"));
+```
+
+The HOI4 binary format can be converted to plaintext with the help of `hoi4save::Melter`:
+
+```rust,ignore
+let data = std::fs::read("assets/saves/1.10-ironman.hoi4")?;
+let (melted, _unknown_tokens) = hoi4save::Melter::new()
+    .with_on_failed_resolve(hoi4save::FailedResolveStrategy::Stringify)
+    .melt(&data[..])?;
 ```
 
 ## Binary Saves
