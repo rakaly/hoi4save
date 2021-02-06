@@ -43,11 +43,11 @@ tokens. I am also restricted from divulging how the list of tokens can be derive
 
 mod date;
 mod errors;
+mod extraction;
 mod flavor;
 mod melt;
-mod tokens;
-mod extraction;
 pub mod models;
+mod tokens;
 
 pub use date::*;
 pub use errors::*;

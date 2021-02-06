@@ -39,7 +39,12 @@ impl Date {
         if year != 0 && month != 0 && day != 0 && year > -100 && hour != 0 && hour < 25 {
             if let Some(&days) = DAYS_PER_MONTH.get(usize::from(month)) {
                 if day <= days {
-                    return Some(Date { year, month, day, hour });
+                    return Some(Date {
+                        year,
+                        month,
+                        day,
+                        hour,
+                    });
                 }
             }
         }
@@ -195,13 +200,18 @@ impl Date {
         let (month, day) = month_day_from_julian(days_since_jan1);
 
         let year = i16::try_from(year).expect("year to fit inside signed 32bits");
-        Date { year, month, day, hour: self.hour, }
+        Date {
+            year,
+            month,
+            day,
+            hour: self.hour,
+        }
     }
 
     /// Decodes a date from a number that had been parsed from binary data
     pub fn from_binary(mut s: i32) -> Option<Self> {
         if s < 0 {
-            return None
+            return None;
         }
 
         let hours = (s % 24) as u8 + 1;
@@ -219,7 +229,10 @@ impl Date {
 
     /// Formats a date in the ISO 8601 format: YYYY-MM-DD
     pub fn iso_8601(&self) -> String {
-        format!("{:04}-{:02}-{:02}T{:02}", self.year, self.month, self.day, self.hour)
+        format!(
+            "{:04}-{:02}-{:02}T{:02}",
+            self.year, self.month, self.day, self.hour
+        )
     }
 
     /// Formats a date in the game format: Y.M.D

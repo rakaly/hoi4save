@@ -1,5 +1,5 @@
-use std::error::Error;
 use hoi4save::{Encoding, Hoi4Extractor};
+use std::error::Error;
 
 mod utils;
 

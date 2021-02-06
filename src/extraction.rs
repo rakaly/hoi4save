@@ -1,6 +1,6 @@
 use jomini::{BinaryDeserializer, FailedResolveStrategy, TextDeserializer, TextTape};
 
-use crate::{Hoi4Error, flavor::Hoi4Flavor, models::Hoi4Save, tokens::TokenLookup};
+use crate::{flavor::Hoi4Flavor, models::Hoi4Save, tokens::TokenLookup, Hoi4Error};
 
 /// Describes the format of the save before decoding
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -54,15 +54,14 @@ impl Hoi4ExtractorBuilder {
                 let tape = TextTape::from_slice(save_data)?;
                 let save = TextDeserializer::from_utf8_tape(&tape)?;
                 Ok((save, Encoding::Plaintext))
-            },
+            }
             Some(x) if x == binary_header => {
                 let save_data = &data[binary_header.len()..];
-                let save = BinaryDeserializer::builder_flavor(Hoi4Flavor).from_slice(save_data, &TokenLookup)?;
+                let save = BinaryDeserializer::builder_flavor(Hoi4Flavor)
+                    .from_slice(save_data, &TokenLookup)?;
                 Ok((save, Encoding::Binary))
             }
-            _ => {
-                return Err(Hoi4Error::new(crate::Hoi4ErrorKind::UnknownHeader))
-            }
+            _ => return Err(Hoi4Error::new(crate::Hoi4ErrorKind::UnknownHeader)),
         }
     }
 }

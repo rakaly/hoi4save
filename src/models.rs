@@ -1,5 +1,5 @@
-use serde::{Deserialize};
 use crate::Hoi4Date;
+use serde::Deserialize;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Hoi4Save {

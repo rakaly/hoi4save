@@ -1,6 +1,6 @@
-use std::{fs, io::Cursor};
-use std::path::Path;
 use std::io::Read;
+use std::path::Path;
+use std::{fs, io::Cursor};
 
 /// See other impls for the reason for this function
 pub fn retrieve<S: AsRef<str>>(input: S) -> Vec<u8> {
