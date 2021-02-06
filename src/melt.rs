@@ -1,4 +1,7 @@
-use crate::{FailedResolveStrategy, Hoi4Date, Hoi4Error, Hoi4ErrorKind, flavor::Hoi4Flavor, tokens::TokenLookup};
+use crate::{
+    flavor::Hoi4Flavor, tokens::TokenLookup, FailedResolveStrategy, Hoi4Date, Hoi4Error,
+    Hoi4ErrorKind,
+};
 use jomini::{BinaryTape, BinaryToken, TokenResolver};
 use std::{collections::HashSet, io::Write};
 
@@ -104,13 +107,15 @@ impl Melter {
                         writer.extend_from_slice(format!("{}", x).as_bytes());
                     }
                 }
-                BinaryToken::Text(x) => {
+                BinaryToken::Quoted(x) => {
                     let data = x.view_data();
                     let end_idx = match data.last() {
                         Some(x) if *x == b'\n' => data.len() - 1,
                         Some(_x) => data.len(),
                         None => data.len(),
                     };
+
+                    // quoted fields occuring as keys should remain unquoted
                     if in_object == 1 {
                         writer.extend_from_slice(&data[..end_idx]);
                     } else {
@@ -118,6 +123,10 @@ impl Melter {
                         writer.extend_from_slice(&data[..end_idx]);
                         writer.push(b'"');
                     }
+                }
+                BinaryToken::Unquoted(x) => {
+                    let data = x.view_data();
+                    writer.extend_from_slice(&data);
                 }
                 BinaryToken::F32_1(x) => write!(writer, "{}", x).map_err(Hoi4ErrorKind::IoErr)?,
                 BinaryToken::F32_2(x) => write!(writer, "{}", x).map_err(Hoi4ErrorKind::IoErr)?,
