@@ -128,8 +128,8 @@ impl Melter {
                     let data = x.view_data();
                     writer.extend_from_slice(&data);
                 }
-                BinaryToken::F32_1(x) => write!(writer, "{}", x).map_err(Hoi4ErrorKind::IoErr)?,
-                BinaryToken::F32_2(x) => write!(writer, "{}", x).map_err(Hoi4ErrorKind::IoErr)?,
+                BinaryToken::F32(x) => write!(writer, "{}", x).map_err(Hoi4ErrorKind::IoErr)?,
+                BinaryToken::F64(x) => write!(writer, "{}", x).map_err(Hoi4ErrorKind::IoErr)?,
                 BinaryToken::Token(x) => match TokenLookup.resolve(*x) {
                     Some(id) if id == "is_ironman" && in_object == 1 => {
                         let skip = tokens

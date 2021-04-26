@@ -12,7 +12,7 @@ keywords = ["hoi4", "ironman"]
 categories = ["parsing"]
 
 [dependencies]
-jomini = "0.12"
+jomini = "0.13"
 serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
