@@ -1,3 +1,8 @@
+## v0.1.4 - 2021-05-18
+
+- Omit carriage return when writing melted output
+- Preserve ironman fields in melted output with rewrite config
+
 ## v0.1.3 - 2021-04-26
 
 More accurate melter for 64bit floating point values
