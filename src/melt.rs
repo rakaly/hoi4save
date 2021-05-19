@@ -61,7 +61,7 @@ impl Melter {
             match token {
                 BinaryToken::Object(_) => {
                     did_change = true;
-                    writer.extend_from_slice(b"{\r\n");
+                    writer.extend_from_slice(b"{\n");
                     depth += 1;
                     in_objects.push(in_object);
                     in_object = 1;
@@ -188,7 +188,6 @@ impl Melter {
                 in_object = 2;
             } else if in_object == 2 {
                 in_object = 1;
-                writer.push(b'\r');
                 writer.push(b'\n');
             } else if in_object != 1 {
                 writer.push(b' ');
@@ -204,7 +203,7 @@ impl Melter {
     /// with the gamestate data decoded from binary to plain text.
     pub fn melt(&self, mut data: &[u8]) -> Result<(Vec<u8>, HashSet<u16>), Hoi4Error> {
         let mut result = Vec::with_capacity(data.len());
-        result.extend_from_slice(b"HOI4txt\r\n");
+        result.extend_from_slice(b"HOI4txt\n");
         let header = b"HOI4bin";
         if data.get(..header.len()).map_or(false, |x| x == header) {
             data = &data[header.len()..];
