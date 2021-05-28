@@ -2,8 +2,8 @@ use crate::{
     flavor::Hoi4Flavor, tokens::TokenLookup, FailedResolveStrategy, Hoi4Date, Hoi4Error,
     Hoi4ErrorKind,
 };
-use jomini::{BinaryTape, BinaryToken, TokenResolver};
-use std::{collections::HashSet, io::Write};
+use jomini::{BinaryTape, BinaryToken, TextWriterBuilder, TokenResolver};
+use std::collections::HashSet;
 
 /// Convert a binary gamestate to plaintext
 #[derive(Debug)]
@@ -49,100 +49,55 @@ impl Melter {
         unknown_tokens: &mut HashSet<u16>,
     ) -> Result<(), Hoi4Error> {
         let tape = BinaryTape::parser_flavor(Hoi4Flavor).parse_slice(input)?;
-        let mut depth = 0;
-        let mut in_objects: Vec<i32> = Vec::new();
-        let mut in_object = 1;
+        let mut wtr = TextWriterBuilder::new().from_writer(writer);
         let mut token_idx = 0;
         let mut known_number = false;
         let tokens = tape.tokens();
 
         while let Some(token) = tokens.get(token_idx) {
-            let mut did_change = false;
-            if in_object == 1 {
-                let depth = match token {
-                    BinaryToken::End(_) => depth - 1,
-                    _ => depth,
-                };
-
-                for _ in 0..depth {
-                    writer.push(b' ');
-                }
-            }
-
             match token {
                 BinaryToken::Object(_) => {
-                    did_change = true;
-                    writer.extend_from_slice(b"{\n");
-                    depth += 1;
-                    in_objects.push(in_object);
-                    in_object = 1;
+                    wtr.write_object_start()?;
                 }
                 BinaryToken::HiddenObject(_) => {
-                    did_change = true;
-                    depth += 1;
-                    in_objects.push(in_object);
-                    in_object = 1;
+                    wtr.write_object_start()?;
                 }
                 BinaryToken::Array(_) => {
-                    did_change = true;
-                    writer.push(b'{');
-                    depth += 1;
-                    in_objects.push(in_object);
-                    in_object = 0;
+                    wtr.write_array_start()?;
                 }
-                BinaryToken::End(x) => {
-                    if !matches!(tokens.get(*x), Some(BinaryToken::HiddenObject(_))) {
-                        writer.push(b'}');
-                    }
-                    let obj = in_objects.pop();
-
-                    // The binary parser should already ensure that this will be something, but this is
-                    // just a sanity check
-                    debug_assert!(obj.is_some());
-                    in_object = obj.unwrap_or(1);
-                    depth -= 1;
+                BinaryToken::End(_x) => {
+                    wtr.write_end()?;
                 }
-                BinaryToken::Bool(x) => match x {
-                    true => writer.extend_from_slice(b"yes"),
-                    false => writer.extend_from_slice(b"no"),
-                },
-                BinaryToken::U32(x) => writer.extend_from_slice(format!("{}", x).as_bytes()),
-                BinaryToken::U64(x) => writer.extend_from_slice(format!("{}", x).as_bytes()),
+                BinaryToken::Bool(x) => wtr.write_bool(*x)?,
+                BinaryToken::U32(x) => wtr.write_u32(*x)?,
+                BinaryToken::U64(x) => wtr.write_u64(*x)?,
                 BinaryToken::I32(x) => {
                     if known_number {
-                        writer.extend_from_slice(format!("{}", x).as_bytes());
+                        wtr.write_i32(*x)?;
                         known_number = false;
                     } else if let Some(date) = Hoi4Date::from_binary(*x) {
-                        writer.extend_from_slice(date.game_fmt().as_bytes());
+                        write!(
+                            wtr,
+                            "{}.{}.{}.{}",
+                            date.year(),
+                            date.month(),
+                            date.day(),
+                            date.hour()
+                        )?;
                     } else {
-                        writer.extend_from_slice(format!("{}", x).as_bytes());
+                        wtr.write_i32(*x)?;
                     }
                 }
                 BinaryToken::Quoted(x) => {
-                    let data = x.view_data();
-                    let end_idx = match data.last() {
-                        Some(x) if *x == b'\n' => data.len() - 1,
-                        Some(_x) => data.len(),
-                        None => data.len(),
-                    };
-
-                    // quoted fields occuring as keys should remain unquoted
-                    if in_object == 1 {
-                        writer.extend_from_slice(&data[..end_idx]);
-                    } else {
-                        writer.push(b'"');
-                        writer.extend_from_slice(&data[..end_idx]);
-                        writer.push(b'"');
-                    }
+                    wtr.write_quoted(x.view_data())?;
                 }
                 BinaryToken::Unquoted(x) => {
-                    let data = x.view_data();
-                    writer.extend_from_slice(&data);
+                    wtr.write_unquoted(x.view_data())?;
                 }
-                BinaryToken::F32(x) => write!(writer, "{}", x).map_err(Hoi4ErrorKind::IoErr)?,
-                BinaryToken::F64(x) => write!(writer, "{}", x).map_err(Hoi4ErrorKind::IoErr)?,
+                BinaryToken::F32(x) => wtr.write_f32(*x)?,
+                BinaryToken::F64(x) => wtr.write_f64(*x)?,
                 BinaryToken::Token(x) => match TokenLookup.resolve(*x) {
-                    Some(id) if self.rewrite && id == "is_ironman" && in_object == 1 => {
+                    Some(id) if self.rewrite && id == "is_ironman" && wtr.expecting_key() => {
                         let skip = tokens
                             .get(token_idx + 1)
                             .map(|next_token| match next_token {
@@ -156,8 +111,8 @@ impl Melter {
                         continue;
                     }
                     Some(id) => {
-                        known_number = in_object == 1 && id.ends_with("seed");
-                        writer.extend_from_slice(&id.as_bytes())
+                        known_number = id.ends_with("seed");
+                        wtr.write_unquoted(id.as_bytes())?;
                     }
                     None => {
                         unknown_tokens.insert(*x);
@@ -165,7 +120,7 @@ impl Melter {
                             FailedResolveStrategy::Error => {
                                 return Err(Hoi4ErrorKind::UnknownToken { token_id: *x }.into());
                             }
-                            FailedResolveStrategy::Ignore if in_object == 1 => {
+                            FailedResolveStrategy::Ignore if wtr.expecting_key() => {
                                 let skip = tokens
                                     .get(token_idx + 1)
                                     .map(|next_token| match next_token {
@@ -179,29 +134,19 @@ impl Melter {
                                 continue;
                             }
                             _ => {
-                                let unknown = format!("__unknown_0x{:x}", x);
-                                writer.extend_from_slice(unknown.as_bytes());
+                                write!(wtr, "__unknown_0x{:x}", x)?;
                             }
                         }
                     }
                 },
                 BinaryToken::Rgb(color) => {
-                    writer.extend_from_slice(b"rgb {");
-                    writer.extend_from_slice(format!("{} ", color.r).as_bytes());
-                    writer.extend_from_slice(format!("{} ", color.g).as_bytes());
-                    writer.extend_from_slice(format!("{}", color.b).as_bytes());
-                    writer.push(b'}');
+                    wtr.write_header(b"rgb")?;
+                    wtr.write_array_start()?;
+                    wtr.write_u32(color.r)?;
+                    wtr.write_u32(color.g)?;
+                    wtr.write_u32(color.b)?;
+                    wtr.write_end()?;
                 }
-            }
-
-            if !did_change && in_object == 1 {
-                writer.push(b'=');
-                in_object = 2;
-            } else if in_object == 2 {
-                in_object = 1;
-                writer.push(b'\n');
-            } else if in_object != 1 {
-                writer.push(b' ');
             }
 
             token_idx += 1;
