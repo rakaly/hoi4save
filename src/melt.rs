@@ -49,7 +49,10 @@ impl Melter {
         unknown_tokens: &mut HashSet<u16>,
     ) -> Result<(), Hoi4Error> {
         let tape = BinaryTape::parser_flavor(Hoi4Flavor).parse_slice(input)?;
-        let mut wtr = TextWriterBuilder::new().from_writer(writer);
+        let mut wtr = TextWriterBuilder::new()
+            .indent_char(b'\t')
+            .indent_factor(1)
+            .from_writer(writer);
         let mut token_idx = 0;
         let mut known_number = false;
         let tokens = tape.tokens();
