@@ -1,3 +1,8 @@
+## v0.1.5 - 2021-05-28
+
+- Melt with tabs instead of spaces
+- Melted quoted values are now escaped as needed
+
 ## v0.1.4 - 2021-05-18
 
 - Omit carriage return when writing melted output
