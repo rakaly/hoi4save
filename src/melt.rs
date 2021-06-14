@@ -1,6 +1,6 @@
 use crate::{
     flavor::Hoi4Flavor, tokens::TokenLookup, FailedResolveStrategy, Hoi4Date, Hoi4Error,
-    Hoi4ErrorKind,
+    Hoi4ErrorKind, PdsDate,
 };
 use jomini::{BinaryTape, BinaryToken, TextWriterBuilder, TokenResolver};
 use std::collections::HashSet;
@@ -78,15 +78,8 @@ impl Melter {
                     if known_number {
                         wtr.write_i32(*x)?;
                         known_number = false;
-                    } else if let Some(date) = Hoi4Date::from_binary(*x) {
-                        write!(
-                            wtr,
-                            "{}.{}.{}.{}",
-                            date.year(),
-                            date.month(),
-                            date.day(),
-                            date.hour()
-                        )?;
+                    } else if let Some(date) = Hoi4Date::from_binary_heuristic(*x) {
+                        wtr.write_date(date.game_fmt())?;
                     } else {
                         wtr.write_i32(*x)?;
                     }
