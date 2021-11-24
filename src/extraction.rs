@@ -61,7 +61,7 @@ impl Hoi4ExtractorBuilder {
                     .from_slice(save_data, &TokenLookup)?;
                 Ok((save, Encoding::Binary))
             }
-            _ => return Err(Hoi4Error::new(crate::Hoi4ErrorKind::UnknownHeader)),
+            _ => Err(Hoi4Error::new(crate::Hoi4ErrorKind::UnknownHeader)),
         }
     }
 }
