@@ -1,3 +1,7 @@
+## v0.1.7 - 2021-11-24
+
+- Detect and melt known dates correctly
+
 ## v0.1.6 - 2021-07-04
 
 - Fix improper melted output when a name ended with a quote
