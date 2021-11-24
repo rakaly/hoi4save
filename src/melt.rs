@@ -55,6 +55,7 @@ impl Melter {
             .from_writer(writer);
         let mut token_idx = 0;
         let mut known_number = false;
+        let mut known_date = false;
         let tokens = tape.tokens();
 
         while let Some(token) = tokens.get(token_idx) {
@@ -78,6 +79,15 @@ impl Melter {
                     if known_number {
                         wtr.write_i32(*x)?;
                         known_number = false;
+                    } else if known_date {
+                        if let Some(date) = Hoi4Date::from_binary(*x) {
+                            wtr.write_date(date.game_fmt())?;
+                        } else if self.on_failed_resolve != FailedResolveStrategy::Error {
+                            wtr.write_i32(*x)?;
+                        } else {
+                            return Err(Hoi4Error::new(Hoi4ErrorKind::InvalidDate(*x)));
+                        }
+                        known_date = false;
                     } else if let Some(date) = Hoi4Date::from_binary_heuristic(*x) {
                         wtr.write_date(date.game_fmt())?;
                     } else {
@@ -108,6 +118,7 @@ impl Melter {
                     }
                     Some(id) => {
                         known_number = id.ends_with("seed");
+                        known_date = id == "date";
                         wtr.write_unquoted(id.as_bytes())?;
                     }
                     None => {

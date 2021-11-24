@@ -28,6 +28,7 @@ pub enum Hoi4ErrorKind {
         part: Option<String>,
         err: jomini::Error,
     },
+    InvalidDate(i32),
 }
 
 impl fmt::Display for Hoi4Error {
@@ -42,6 +43,7 @@ impl fmt::Display for Hoi4Error {
                 Some(p) => write!(f, "error deserializing: {}: {}", p, err),
                 None => err.fmt(f),
             },
+            Hoi4ErrorKind::InvalidDate(x) => write!(f, "expected {} to be parsed as a date", x),
         }
     }
 }
