@@ -1,4 +1,6 @@
-use jomini::{BinaryDeserializer, FailedResolveStrategy, TextDeserializer, TextTape};
+use jomini::{
+    BinaryDeserializer, FailedResolveStrategy, TextDeserializer, TextTape, TokenResolver,
+};
 
 use crate::{flavor::Hoi4Flavor, models::Hoi4Save, tokens::TokenLookup, Hoi4Error};
 
@@ -41,11 +43,30 @@ impl Hoi4ExtractorBuilder {
 
     /// Extract all info from a save
     pub fn extract_save(&self, data: &[u8]) -> Result<(Hoi4Save, Encoding), Hoi4Error> {
-        self.extract_save_as(data)
+        self.extract_save_with_tokens(data, &TokenLookup)
+    }
+
+    /// Extract all info from a save
+    pub fn extract_save_with_tokens<Q>(
+        &self,
+        data: &[u8],
+        resolver: &Q,
+    ) -> Result<(Hoi4Save, Encoding), Hoi4Error>
+    where
+        Q: TokenResolver,
+    {
+        self.extract_save_with_tokens_as(data, resolver)
     }
 
     // todo, customize deserialize type
-    fn extract_save_as(&self, data: &[u8]) -> Result<(Hoi4Save, Encoding), Hoi4Error> {
+    fn extract_save_with_tokens_as<Q>(
+        &self,
+        data: &[u8],
+        resolver: &Q,
+    ) -> Result<(Hoi4Save, Encoding), Hoi4Error>
+    where
+        Q: TokenResolver,
+    {
         let text_header = b"HOI4txt";
         let binary_header = b"HOI4bin";
         match data.get(..text_header.len()) {
@@ -58,7 +79,7 @@ impl Hoi4ExtractorBuilder {
             Some(x) if x == binary_header => {
                 let save_data = &data[binary_header.len()..];
                 let save = BinaryDeserializer::builder_flavor(Hoi4Flavor)
-                    .from_slice(save_data, &TokenLookup)?;
+                    .from_slice(save_data, resolver)?;
                 Ok((save, Encoding::Binary))
             }
             _ => Err(Hoi4Error::new(crate::Hoi4ErrorKind::UnknownHeader)),

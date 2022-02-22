@@ -2,7 +2,7 @@ use crate::{
     flavor::Hoi4Flavor, tokens::TokenLookup, FailedResolveStrategy, Hoi4Date, Hoi4Error,
     Hoi4ErrorKind, PdsDate,
 };
-use jomini::{BinaryTape, BinaryToken, TextWriterBuilder, TokenResolver};
+use jomini::{BinaryFlavor, BinaryTape, BinaryToken, TextWriterBuilder, TokenResolver};
 use std::collections::HashSet;
 
 /// Convert a binary gamestate to plaintext
@@ -42,13 +42,18 @@ impl Melter {
         self
     }
 
-    fn convert(
+    fn convert<Q>(
         &self,
         input: &[u8],
         writer: &mut Vec<u8>,
         unknown_tokens: &mut HashSet<u16>,
-    ) -> Result<(), Hoi4Error> {
-        let tape = BinaryTape::parser_flavor(Hoi4Flavor).parse_slice(input)?;
+        resolver: &Q,
+    ) -> Result<(), Hoi4Error>
+    where
+        Q: TokenResolver,
+    {
+        let flavor = Hoi4Flavor;
+        let tape = BinaryTape::from_slice(input)?;
         let mut wtr = TextWriterBuilder::new()
             .indent_char(b'\t')
             .indent_factor(1)
@@ -100,9 +105,9 @@ impl Melter {
                 BinaryToken::Unquoted(x) => {
                     wtr.write_unquoted(x.as_bytes())?;
                 }
-                BinaryToken::F32(x) => wtr.write_f32(*x)?,
-                BinaryToken::F64(x) => wtr.write_f64(*x)?,
-                BinaryToken::Token(x) => match TokenLookup.resolve(*x) {
+                BinaryToken::F32(x) => wtr.write_f32(flavor.visit_f32(*x))?,
+                BinaryToken::F64(x) => wtr.write_f64(flavor.visit_f64(*x))?,
+                BinaryToken::Token(x) => match resolver.resolve(*x) {
                     Some(id) if self.rewrite && id == "is_ironman" && wtr.expecting_key() => {
                         let skip = tokens
                             .get(token_idx + 1)
@@ -164,7 +169,14 @@ impl Melter {
 
     /// Given one of the accepted inputs, this will return the save id line (if present in the input)
     /// with the gamestate data decoded from binary to plain text.
-    pub fn melt(&self, mut data: &[u8]) -> Result<(Vec<u8>, HashSet<u16>), Hoi4Error> {
+    pub fn melt_with_tokens<Q>(
+        &self,
+        mut data: &[u8],
+        resolver: &Q,
+    ) -> Result<(Vec<u8>, HashSet<u16>), Hoi4Error>
+    where
+        Q: TokenResolver,
+    {
         let mut result = Vec::with_capacity(data.len());
         result.extend_from_slice(b"HOI4txt\n");
         let header = b"HOI4bin";
@@ -173,7 +185,13 @@ impl Melter {
         }
 
         let mut unknown_tokens = HashSet::new();
-        self.convert(data, &mut result, &mut unknown_tokens)?;
+        self.convert(data, &mut result, &mut unknown_tokens, resolver)?;
         Ok((result, unknown_tokens))
+    }
+
+    /// Given one of the accepted inputs, this will return the save id line (if present in the input)
+    /// with the gamestate data decoded from binary to plain text.
+    pub fn melt(&self, data: &[u8]) -> Result<(Vec<u8>, HashSet<u16>), Hoi4Error> {
+        self.melt_with_tokens(data, &TokenLookup)
     }
 }
