@@ -1,3 +1,7 @@
+## v0.1.8 - 2022-02-22
+
+- Expose token stringification customization with `_with_tokens` methods
+
 ## v0.1.7 - 2021-11-24
 
 - Detect and melt known dates correctly
