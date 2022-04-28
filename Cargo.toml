@@ -16,8 +16,8 @@ jomini = "0.18"
 serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
-zip = { version =  "0.5", default-features = false, features = ["deflate"] }
-attohttpc = "0.18"
+zip = { version =  "0.6", default-features = false, features = ["deflate"] }
+attohttpc = "0.19"
 
 [profile.test]
 opt-level = 3
