@@ -1,8 +1,8 @@
-use jomini::TokenResolver;
+use jomini::binary::TokenResolver;
 
-pub(crate) struct TokenLookup;
+pub struct EnvTokens;
 
-impl TokenResolver for TokenLookup {
+impl TokenResolver for EnvTokens {
     fn resolve(&self, token: u16) -> Option<&str> {
         include!(concat!(env!("OUT_DIR"), "/gen_tokens.rs"))
     }

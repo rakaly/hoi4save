@@ -5,22 +5,31 @@
 HOI4 Save is a library to ergonomically work with Hearts of Iron IV saves (plaintext + binary).
 
 ```rust,ignore
-use hoi4save::{Hoi4Extractor, Encoding};
-use std::io::Cursor;
-
+use hoi4save::{Hoi4File, Encoding, EnvTokens, models::Hoi4Save};
 let data = std::fs::read("assets/saves/1.10-normal-text.hoi4")?;
-let (save, encoding) = Hoi4Extractor::extract_save(&data[..])?;
-assert_eq!(encoding, Encoding::Plaintext);
+let file = Hoi4File::from_slice(&data)?;
+let parsed_file = file.parse()?;
+let save: Hoi4Save = parsed_file.deserializer().build(&EnvTokens)?;
+assert_eq!(file.encoding(), Encoding::Plaintext);
 assert_eq!(save.player, String::from("FRA"));
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
-The HOI4 binary format can be converted to plaintext with the help of `hoi4save::Melter`:
+The HOI4 binary format can be converted to plaintext
 
 ```rust,ignore
+use hoi4save::{Hoi4File, EnvTokens};
+
 let data = std::fs::read("assets/saves/1.10-ironman.hoi4")?;
-let (melted, _unknown_tokens) = hoi4save::Melter::new()
-    .with_on_failed_resolve(hoi4save::FailedResolveStrategy::Stringify)
-    .melt(&data[..])?;
+let file = Hoi4File::from_slice(&data)?;
+let parsed_file = file.parse()?;
+let binary = parsed_file.as_binary().unwrap();
+let out = binary
+    .melter()
+    .on_failed_resolve(hoi4save::FailedResolveStrategy::Stringify)
+    .melt(&EnvTokens)?;
+
+# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 ## Binary Saves
@@ -44,6 +53,7 @@ tokens. I am also restricted from divulging how the list of tokens can be derive
 mod date;
 mod errors;
 mod extraction;
+pub mod file;
 mod flavor;
 mod melt;
 pub mod models;
@@ -52,5 +62,8 @@ mod tokens;
 pub use date::*;
 pub use errors::*;
 pub use extraction::*;
-pub use jomini::FailedResolveStrategy;
+#[doc(inline)]
+pub use file::Hoi4File;
+pub use jomini::binary::FailedResolveStrategy;
 pub use melt::*;
+pub use tokens::EnvTokens;
