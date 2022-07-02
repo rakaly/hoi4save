@@ -1,3 +1,9 @@
+## v0.2.0 - 2022-07-02
+
+New file API that makes it easier to parse, deserialize, melt, and convert to
+JSON without parsing a save more than once. See [PR
+#1](https://github.com/rakaly/hoi4save/pull/1) for more info
+
 ## v0.1.9 - 2022-03-20
 
 - Bump parser dependency to latest, no changes
