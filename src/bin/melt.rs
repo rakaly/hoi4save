@@ -1,15 +1,21 @@
 use std::env;
 use std::io::Write;
 
-fn main() {
+use hoi4save::{Hoi4File, FailedResolveStrategy, EnvTokens};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
-    let file_data = std::fs::read(&args[1]).unwrap();
-    let (melted, _tokens) = hoi4save::Melter::new()
-        .with_on_failed_resolve(hoi4save::FailedResolveStrategy::Stringify)
-        .melt(&file_data[..])
-        .unwrap();
+    let data = std::fs::read(&args[1])?;
+    let file = Hoi4File::from_slice(&data)?;
+    let file = file.parse()?;
+    let binary = file.as_binary().unwrap();
+    let melted = binary
+        .melter()
+        .on_failed_resolve(FailedResolveStrategy::Error)
+        .melt(&EnvTokens)?;
 
     let stdout = std::io::stdout();
     let mut handle = stdout.lock();
-    handle.write_all(&melted[..]).unwrap();
+    let _ = handle.write_all(melted.data());
+    Ok(())
 }

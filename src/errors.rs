@@ -1,9 +1,7 @@
-use std::fmt;
-use std::io::Error as IoError;
-
-/// An Hoi4 Error
-#[derive(Debug)]
-pub struct Hoi4Error(Box<Hoi4ErrorKind>);
+/// A Hoi4 Error
+#[derive(thiserror::Error, Debug)]
+#[error(transparent)]
+pub struct Hoi4Error(#[from] Box<Hoi4ErrorKind>);
 
 impl Hoi4Error {
     pub(crate) fn new(kind: Hoi4ErrorKind) -> Hoi4Error {
@@ -16,64 +14,32 @@ impl Hoi4Error {
     }
 }
 
-/// Specific type of error
-#[derive(Debug)]
-pub enum Hoi4ErrorKind {
-    IoErr(IoError),
-    UnknownHeader,
-    UnknownToken {
-        token_id: u16,
-    },
-    Deserialize {
-        part: Option<String>,
-        err: jomini::Error,
-    },
-    InvalidDate(i32),
-}
-
-impl fmt::Display for Hoi4Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind() {
-            Hoi4ErrorKind::IoErr(_) => write!(f, "io error"),
-            Hoi4ErrorKind::UnknownHeader => write!(f, "unknown header encountered in zip"),
-            Hoi4ErrorKind::UnknownToken { token_id } => {
-                write!(f, "unknown binary token encountered (id: {})", token_id)
-            }
-            Hoi4ErrorKind::Deserialize { ref part, ref err } => match part {
-                Some(p) => write!(f, "error deserializing: {}: {}", p, err),
-                None => err.fmt(f),
-            },
-            Hoi4ErrorKind::InvalidDate(x) => write!(f, "expected {} to be parsed as a date", x),
-        }
-    }
-}
-
-impl std::error::Error for Hoi4Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self.kind() {
-            Hoi4ErrorKind::IoErr(e) => Some(e),
-            Hoi4ErrorKind::Deserialize { ref err, .. } => Some(err),
-            _ => None,
-        }
-    }
-}
-
-impl From<jomini::Error> for Hoi4Error {
-    fn from(err: jomini::Error) -> Self {
-        Hoi4Error::new(Hoi4ErrorKind::Deserialize { part: None, err })
-    }
-}
-
-impl From<IoError> for Hoi4Error {
-    fn from(err: IoError) -> Self {
-        Hoi4Error::new(Hoi4ErrorKind::IoErr(err))
-    }
-}
-
 impl From<Hoi4ErrorKind> for Hoi4Error {
     fn from(err: Hoi4ErrorKind) -> Self {
         Hoi4Error::new(err)
     }
+}
+
+/// Specific type of error
+#[derive(thiserror::Error, Debug)]
+pub enum Hoi4ErrorKind {
+    #[error("unable to parse due to: {0}")]
+    Parse(#[source] jomini::Error),
+
+    #[error("unable to deserialize due to: {0}")]
+    Deserialize(#[source] jomini::Error),
+
+    #[error("error while writing output: {0}")]
+    Writer(#[source] jomini::Error),
+
+    #[error("unknown binary token encountered: {token_id:#x}")]
+    UnknownToken { token_id: u16 },
+
+    #[error("expected the binary integer: {0} to be parsed as a date")]
+    InvalidDate(i32),
+
+    #[error("unknown header")]
+    UnknownHeader,
 }
 
 #[cfg(test)]

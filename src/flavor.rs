@@ -1,4 +1,4 @@
-use jomini::{BinaryFlavor, Encoding, Utf8Encoding};
+use jomini::{binary::BinaryFlavor, Encoding, Utf8Encoding};
 
 pub struct Hoi4Flavor;
 

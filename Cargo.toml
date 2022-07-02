@@ -12,8 +12,9 @@ keywords = ["hoi4", "ironman"]
 categories = ["parsing"]
 
 [dependencies]
-jomini = "0.18"
+jomini = { version = "0.19", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
+thiserror = "1"
 
 [dev-dependencies]
 zip = { version =  "0.6", default-features = false, features = ["deflate"] }
