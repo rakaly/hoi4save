@@ -12,7 +12,6 @@ let parsed_file = file.parse()?;
 let save: Hoi4Save = parsed_file.deserializer().build(&EnvTokens)?;
 assert_eq!(file.encoding(), Encoding::Plaintext);
 assert_eq!(save.player, String::from("FRA"));
-# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 The HOI4 binary format can be converted to plaintext
@@ -28,8 +27,6 @@ let out = binary
     .melter()
     .on_failed_resolve(hoi4save::FailedResolveStrategy::Stringify)
     .melt(&EnvTokens)?;
-
-# Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
 ## Binary Saves
