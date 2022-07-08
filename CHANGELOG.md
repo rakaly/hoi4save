@@ -1,3 +1,7 @@
+## v0.2.1 - 2022-07-08
+
+Empty HOI4_IRONMAN_TOKENS same as unset
+
 ## v0.2.0 - 2022-07-02
 
 New file API that makes it easier to parse, deserialize, melt, and convert to
