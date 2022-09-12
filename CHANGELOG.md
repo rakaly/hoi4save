@@ -1,3 +1,7 @@
+## v0.3.1 - 2022-09-12
+
+- Allow ownership transfer of melted output
+
 ## v0.3.0 - 2022-09-12
 
 - Bump to edition 2021
