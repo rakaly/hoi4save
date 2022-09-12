@@ -1,3 +1,7 @@
+## v0.3.0 - 2022-09-12
+
+- Bump to edition 2021
+
 ## v0.2.1 - 2022-07-08
 
 Empty HOI4_IRONMAN_TOKENS same as unset
