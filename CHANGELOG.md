@@ -1,3 +1,7 @@
+## v0.3.2 - 2022-10-24
+
+- Update jomini parser to 0.20
+
 ## v0.3.1 - 2022-09-12
 
 - Allow ownership transfer of melted output
