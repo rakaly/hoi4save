@@ -115,8 +115,11 @@ where
             BinaryToken::Object(_) => {
                 wtr.write_object_start()?;
             }
-            BinaryToken::HiddenObject(_) => {
-                wtr.write_hidden_object_start()?;
+            BinaryToken::MixedContainer => {
+                wtr.start_mixed_mode();
+            }
+            BinaryToken::Equal => {
+                wtr.write_operator(jomini::text::Operator::Equal)?;
             }
             BinaryToken::Array(_) => {
                 wtr.write_array_start()?;
