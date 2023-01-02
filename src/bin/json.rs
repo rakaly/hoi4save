@@ -1,4 +1,7 @@
-use hoi4save::{file::{Hoi4ParsedFile, Hoi4ParsedFileKind, Hoi4Text}, EnvTokens, Hoi4File};
+use hoi4save::{
+    file::{Hoi4ParsedFile, Hoi4ParsedFileKind, Hoi4Text},
+    EnvTokens, Hoi4File,
+};
 use std::env;
 
 fn json_to_stdout(file: &Hoi4Text) {

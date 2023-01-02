@@ -1,6 +1,6 @@
 use crate::{flavor::Hoi4Flavor, Encoding, Hoi4Error, Hoi4ErrorKind, Hoi4Melter};
 use jomini::{
-    binary::{BinaryDeserializerBuilder, FailedResolveStrategy, TokenResolver},
+    binary::{FailedResolveStrategy, TokenResolver},
     text::ObjectReader,
     BinaryDeserializer, BinaryTape, TextDeserializer, TextTape, Utf8Encoding,
 };
@@ -128,13 +128,16 @@ impl<'a> Hoi4ParsedFile<'a> {
     }
 
     /// Prepares the file for deserialization into a custom structure
-    pub fn deserializer(&self) -> Hoi4Deserializer {
+    pub fn deserializer<'b, RES>(&'b self, resolver: &'b RES) -> Hoi4Deserializer<RES>
+    where
+        RES: TokenResolver,
+    {
         match &self.kind {
             Hoi4ParsedFileKind::Text(x) => Hoi4Deserializer {
                 kind: Hoi4DeserializerKind::Text(x),
             },
             Hoi4ParsedFileKind::Binary(x) => Hoi4Deserializer {
-                kind: Hoi4DeserializerKind::Binary(x.deserializer()),
+                kind: Hoi4DeserializerKind::Binary(x.deserializer(resolver)),
             },
         }
     }
@@ -165,52 +168,60 @@ impl<'a> Hoi4Text<'a> {
     where
         T: Deserialize<'a>,
     {
-        let result =
-            TextDeserializer::from_utf8_tape(&self.tape).map_err(Hoi4ErrorKind::Deserialize)?;
+        let deser = TextDeserializer::from_utf8_tape(&self.tape);
+        let result = deser.deserialize().map_err(Hoi4ErrorKind::Deserialize)?;
         Ok(result)
     }
 }
 
 /// A parsed Hoi4 binary document
-pub struct Hoi4Binary<'a> {
-    tape: BinaryTape<'a>,
+pub struct Hoi4Binary<'data> {
+    tape: BinaryTape<'data>,
 }
 
-impl<'a> Hoi4Binary<'a> {
-    pub fn from_slice(data: &'a [u8]) -> Result<Self, Hoi4Error> {
+impl<'data> Hoi4Binary<'data> {
+    pub fn from_slice(data: &'data [u8]) -> Result<Self, Hoi4Error> {
         is_bin(data)
             .ok_or_else(|| Hoi4ErrorKind::UnknownHeader.into())
             .and_then(Self::from_raw)
     }
 
-    pub(crate) fn from_raw(data: &'a [u8]) -> Result<Self, Hoi4Error> {
+    pub(crate) fn from_raw(data: &'data [u8]) -> Result<Self, Hoi4Error> {
         let tape = BinaryTape::from_slice(data).map_err(Hoi4ErrorKind::Parse)?;
         Ok(Hoi4Binary { tape })
     }
 
-    pub fn deserializer<'b>(&'b self) -> Hoi4BinaryDeserializer<'a, 'b> {
+    pub fn deserializer<'b, RES>(
+        &'b self,
+        resolver: &'b RES,
+    ) -> Hoi4BinaryDeserializer<'data, 'b, RES>
+    where
+        RES: TokenResolver,
+    {
         Hoi4BinaryDeserializer {
-            builder: BinaryDeserializer::builder_flavor(Hoi4Flavor),
-            tape: &self.tape,
+            deser: BinaryDeserializer::builder_flavor(Hoi4Flavor).from_tape(&self.tape, resolver),
         }
     }
 
-    pub fn melter<'b>(&'b self) -> Hoi4Melter<'a, 'b> {
+    pub fn melter<'b>(&'b self) -> Hoi4Melter<'data, 'b> {
         Hoi4Melter::new(&self.tape)
     }
 }
 
-enum Hoi4DeserializerKind<'a, 'b> {
-    Text(&'b Hoi4Text<'a>),
-    Binary(Hoi4BinaryDeserializer<'a, 'b>),
+enum Hoi4DeserializerKind<'data, 'tape, RES> {
+    Text(&'tape Hoi4Text<'data>),
+    Binary(Hoi4BinaryDeserializer<'data, 'tape, RES>),
 }
 
 /// A deserializer for custom structures
-pub struct Hoi4Deserializer<'a, 'b> {
-    kind: Hoi4DeserializerKind<'a, 'b>,
+pub struct Hoi4Deserializer<'data, 'tape, RES> {
+    kind: Hoi4DeserializerKind<'data, 'tape, RES>,
 }
 
-impl<'a, 'b> Hoi4Deserializer<'a, 'b> {
+impl<'data, 'tape, RES> Hoi4Deserializer<'data, 'tape, RES>
+where
+    RES: TokenResolver,
+{
     pub fn on_failed_resolve(&mut self, strategy: FailedResolveStrategy) -> &mut Self {
         if let Hoi4DeserializerKind::Binary(x) = &mut self.kind {
             x.on_failed_resolve(strategy);
@@ -218,47 +229,44 @@ impl<'a, 'b> Hoi4Deserializer<'a, 'b> {
         self
     }
 
-    pub fn build<T, R>(&self, resolver: &'a R) -> Result<T, Hoi4Error>
+    pub fn deserialize<T>(&self) -> Result<T, Hoi4Error>
     where
-        R: TokenResolver,
-        T: Deserialize<'a>,
+        T: Deserialize<'data>,
     {
         match &self.kind {
             Hoi4DeserializerKind::Text(x) => x.deserialize(),
-            Hoi4DeserializerKind::Binary(x) => x.build(resolver),
+            Hoi4DeserializerKind::Binary(x) => x.deserialize(),
         }
     }
 }
 
 /// Deserializes binary data into custom structures
-pub struct Hoi4BinaryDeserializer<'a, 'b> {
-    builder: BinaryDeserializerBuilder<Hoi4Flavor>,
-    tape: &'b BinaryTape<'a>,
+pub struct Hoi4BinaryDeserializer<'data, 'tape, RES> {
+    deser: BinaryDeserializer<'tape, 'data, 'tape, RES, Hoi4Flavor>,
 }
 
-impl<'a, 'b> Hoi4BinaryDeserializer<'a, 'b> {
+impl<'data, 'tape, RES> Hoi4BinaryDeserializer<'data, 'tape, RES>
+where
+    RES: TokenResolver,
+{
     pub fn on_failed_resolve(&mut self, strategy: FailedResolveStrategy) -> &mut Self {
-        self.builder.on_failed_resolve(strategy);
+        self.deser.on_failed_resolve(strategy);
         self
     }
 
-    pub fn build<T, R>(&self, resolver: &'a R) -> Result<T, Hoi4Error>
+    pub fn deserialize<T>(&self) -> Result<T, Hoi4Error>
     where
-        R: TokenResolver,
-        T: Deserialize<'a>,
+        T: Deserialize<'data>,
     {
-        let result = self
-            .builder
-            .from_tape(self.tape, resolver)
-            .map_err(|e| match e.kind() {
-                jomini::ErrorKind::Deserialize(e2) => match e2.kind() {
-                    &jomini::DeserializeErrorKind::UnknownToken { token_id } => {
-                        Hoi4ErrorKind::UnknownToken { token_id }
-                    }
-                    _ => Hoi4ErrorKind::Deserialize(e),
-                },
+        let result = self.deser.deserialize().map_err(|e| match e.kind() {
+            jomini::ErrorKind::Deserialize(e2) => match e2.kind() {
+                &jomini::DeserializeErrorKind::UnknownToken { token_id } => {
+                    Hoi4ErrorKind::UnknownToken { token_id }
+                }
                 _ => Hoi4ErrorKind::Deserialize(e),
-            })?;
+            },
+            _ => Hoi4ErrorKind::Deserialize(e),
+        })?;
         Ok(result)
     }
 }

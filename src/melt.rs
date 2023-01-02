@@ -30,7 +30,6 @@ impl MeltedDocument {
         self.data
     }
 
-
     /// The converted plaintext data
     pub fn data(&self) -> &[u8] {
         self.data.as_slice()

@@ -1,7 +1,7 @@
 use std::env;
 use std::io::Write;
 
-use hoi4save::{Hoi4File, FailedResolveStrategy, EnvTokens};
+use hoi4save::{EnvTokens, FailedResolveStrategy, Hoi4File};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
