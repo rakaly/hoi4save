@@ -1,3 +1,8 @@
+## v0.3.3 - 2023-03-06
+
+- Update melter to recognize `total`, `available`, and `locked` as numbers
+- Update jomini parser to 0.21
+
 ## v0.3.2 - 2022-10-24
 
 - Update jomini parser to 0.20
