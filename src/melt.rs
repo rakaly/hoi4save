@@ -167,7 +167,8 @@ where
                         continue;
                     }
 
-                    known_number = id.ends_with("seed");
+                    known_number =
+                        id.ends_with("seed") || matches!(id, "total" | "available" | "locked");
                     known_date = id == "date";
                     wtr.write_unquoted(id.as_bytes())?;
                 }
