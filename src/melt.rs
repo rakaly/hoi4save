@@ -162,7 +162,10 @@ where
             BinaryToken::F64(x) => wtr.write_f64(flavor.visit_f64(*x))?,
             BinaryToken::Token(x) => match resolver.resolve(*x) {
                 Some(id) => {
-                    if !melter.verbatim && id == "is_ironman" && wtr.expecting_key() {
+                    if !melter.verbatim
+                        && matches!(id, "is_ironman" | "ironman")
+                        && wtr.expecting_key()
+                    {
                         token_idx = melter.skip_value_idx(token_idx);
                         continue;
                     }
