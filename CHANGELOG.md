@@ -1,3 +1,7 @@
+## v0.3.4 - 2023-05-14
+
+- Update melter to exclude `ironman` key from output
+
 ## v0.3.3 - 2023-03-06
 
 - Update melter to recognize `total`, `available`, and `locked` as numbers
