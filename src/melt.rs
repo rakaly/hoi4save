@@ -111,24 +111,6 @@ where
     let tokens = melter.tape.tokens();
     while let Some(token) = tokens.get(token_idx) {
         match token {
-            BinaryToken::Object(_) => {
-                wtr.write_object_start()?;
-            }
-            BinaryToken::MixedContainer => {
-                wtr.start_mixed_mode();
-            }
-            BinaryToken::Equal => {
-                wtr.write_operator(jomini::text::Operator::Equal)?;
-            }
-            BinaryToken::Array(_) => {
-                wtr.write_array_start()?;
-            }
-            BinaryToken::End(_x) => {
-                wtr.write_end()?;
-            }
-            BinaryToken::Bool(x) => wtr.write_bool(*x)?,
-            BinaryToken::U32(x) => wtr.write_u32(*x)?,
-            BinaryToken::U64(x) => wtr.write_u64(*x)?,
             BinaryToken::I32(x) => {
                 if known_number {
                     wtr.write_i32(*x)?;
@@ -154,9 +136,6 @@ where
                 } else {
                     wtr.write_quoted(x.as_bytes())?;
                 }
-            }
-            BinaryToken::Unquoted(x) => {
-                wtr.write_unquoted(x.as_bytes())?;
             }
             BinaryToken::F32(x) => wtr.write_f32(flavor.visit_f32(*x))?,
             BinaryToken::F64(x) => wtr.write_f64(flavor.visit_f64(*x))?,
@@ -189,14 +168,7 @@ where
                     }
                 },
             },
-            BinaryToken::Rgb(color) => {
-                wtr.write_header(b"rgb")?;
-                wtr.write_array_start()?;
-                wtr.write_u32(color.r)?;
-                wtr.write_u32(color.g)?;
-                wtr.write_u32(color.b)?;
-                wtr.write_end()?;
-            }
+            x => wtr.write_binary(x)?,
         }
 
         token_idx += 1;
