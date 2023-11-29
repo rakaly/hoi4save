@@ -50,7 +50,9 @@ tokens. I am also restricted from divulging how the list of tokens can be derive
 
 */
 
+mod country_tag;
 mod date;
+mod de;
 mod errors;
 mod extraction;
 pub mod file;
@@ -59,6 +61,7 @@ mod melt;
 pub mod models;
 mod tokens;
 
+pub use country_tag::*;
 pub use date::*;
 pub use errors::*;
 pub use extraction::*;

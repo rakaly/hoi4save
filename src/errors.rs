@@ -40,6 +40,12 @@ pub enum Hoi4ErrorKind {
 
     #[error("unknown header")]
     UnknownHeader,
+
+    #[error("country tags must be 3 letters in length")]
+    CountryTagIncorrectSize,
+
+    #[error("country tags must contain only ascii letters")]
+    CountryTagInvalidCharacters,
 }
 
 #[cfg(test)]

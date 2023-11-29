@@ -1,8 +1,9 @@
-use crate::{flavor::Hoi4Flavor, Encoding, Hoi4Error, Hoi4ErrorKind, Hoi4Melter};
+use crate::{flavor::Hoi4Flavor, models::Hoi4Save, Encoding, Hoi4Error, Hoi4ErrorKind, Hoi4Melter};
 use jomini::{
     binary::{FailedResolveStrategy, TokenResolver},
     text::ObjectReader,
-    BinaryDeserializer, BinaryTape, TextDeserializer, TextTape, Utf8Encoding,
+    BinaryDeserializer, BinaryTape, OndemandBinaryDeserializer, TextDeserializer, TextTape,
+    Utf8Encoding,
 };
 use serde::Deserialize;
 
@@ -69,6 +70,21 @@ impl<'a> Hoi4File<'a> {
     pub fn size(&self) -> usize {
         match &self.kind {
             FileKind::Text(x) | FileKind::Binary(x) => x.len(),
+        }
+    }
+
+    pub fn parse_save<R>(&self, resolver: &R) -> Result<Hoi4Save, Hoi4Error>
+    where
+        R: TokenResolver,
+    {
+        match &self.kind {
+            FileKind::Text(x) => Hoi4Text::from_raw(x)?.deserialize(),
+            FileKind::Binary(x) => {
+                let save = OndemandBinaryDeserializer::builder_flavor(Hoi4Flavor)
+                    .deserialize_slice(x, resolver)
+                    .map_err(Hoi4ErrorKind::Deserialize)?;
+                Ok(save)
+            }
         }
     }
 
