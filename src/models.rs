@@ -1,9 +1,9 @@
-use std::collections::HashMap;
-
 use crate::{de::deserialize_vec_pair, CountryTag, Hoi4Date};
 use jomini::JominiDeserialize;
+use serde::Serialize;
+use std::collections::HashMap;
 
-#[derive(JominiDeserialize, Debug, Clone)]
+#[derive(JominiDeserialize, Debug, Clone, Serialize)]
 pub struct Hoi4Save {
     pub player: String,
     pub date: Hoi4Date,
@@ -11,7 +11,7 @@ pub struct Hoi4Save {
     pub countries: Vec<(CountryTag, Country)>,
 }
 
-#[derive(JominiDeserialize, Debug, Clone)]
+#[derive(JominiDeserialize, Debug, Clone, Serialize)]
 pub struct Country {
     #[jomini(default)]
     pub stability: f64,
