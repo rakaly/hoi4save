@@ -1,9 +1,8 @@
 use crate::{flavor::Hoi4Flavor, models::Hoi4Save, Encoding, Hoi4Error, Hoi4ErrorKind, Hoi4Melter};
 use jomini::{
-    binary::{FailedResolveStrategy, TokenResolver},
+    binary::{BinaryFlavor, FailedResolveStrategy, TokenResolver},
     text::ObjectReader,
-    BinaryDeserializer, BinaryTape, OndemandBinaryDeserializer, TextDeserializer, TextTape,
-    Utf8Encoding,
+    BinaryDeserializer, BinaryTape, TextDeserializer, TextTape, Utf8Encoding,
 };
 use serde::Deserialize;
 
@@ -80,8 +79,8 @@ impl<'a> Hoi4File<'a> {
         match &self.kind {
             FileKind::Text(x) => Hoi4Text::from_raw(x)?.deserialize(),
             FileKind::Binary(x) => {
-                let save = OndemandBinaryDeserializer::builder_flavor(Hoi4Flavor)
-                    .deserialize_slice(x, resolver)
+                let save = Hoi4Flavor
+                    .deserialize_slice(&x, resolver)
                     .map_err(Hoi4ErrorKind::Deserialize)?;
                 Ok(save)
             }

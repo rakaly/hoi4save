@@ -6,7 +6,7 @@ use crate::{Hoi4Error, Hoi4ErrorKind};
 /// Wrapper around a Country's unique three byte tag
 ///
 /// ```rust
-/// use eu4save::CountryTag;
+/// use hoi4save::CountryTag;
 /// let tag: CountryTag = "ENG".parse()?;
 /// assert_eq!(tag.to_string(), String::from("ENG"));
 /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -19,7 +19,7 @@ impl CountryTag {
     /// three bytes in length and not compose of dashes or alphanumeric data.
     ///
     /// ```
-    /// use eu4save::CountryTag;
+    /// use hoi4save::CountryTag;
     /// let tag: CountryTag = CountryTag::create(b"ENG")?;
     /// # Ok::<(), Box<dyn std::error::Error>>(())
     /// ```
@@ -38,7 +38,7 @@ impl CountryTag {
     /// An ergonomic shortcut to determine if input byte slice contains the same
     /// data as the tag
     /// ```
-    /// use eu4save::CountryTag;
+    /// use hoi4save::CountryTag;
     /// let tag: CountryTag = CountryTag::create(b"ENG")?;
     /// assert!(tag.is(b"ENG"));
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -49,7 +49,7 @@ impl CountryTag {
 
     /// Returns the country tag as a byte slice
     /// ```
-    /// use eu4save::CountryTag;
+    /// use hoi4save::CountryTag;
     /// let tag: CountryTag = CountryTag::create(b"ENG")?;
     /// assert_eq!(tag.as_bytes(), b"ENG");
     /// # Ok::<(), Box<dyn std::error::Error>>(())
@@ -60,7 +60,7 @@ impl CountryTag {
 
     /// Returns the country tag as a string slice
     /// ```
-    /// use eu4save::CountryTag;
+    /// use hoi4save::CountryTag;
     /// let tag: CountryTag = CountryTag::create(b"ENG")?;
     /// assert_eq!(tag.as_str(), "ENG");
     /// # Ok::<(), Box<dyn std::error::Error>>(())

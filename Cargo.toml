@@ -12,7 +12,7 @@ keywords = ["hoi4", "ironman"]
 categories = ["parsing"]
 
 [dependencies]
-jomini = { version = "0.24", features = ["json"] }
+jomini = { git = "https://github.com/rakaly/jomini", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
 
