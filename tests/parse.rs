@@ -88,6 +88,12 @@ fn test_ironman_roundtrip() -> Result<(), Box<dyn Error>> {
         .on_failed_resolve(hoi4save::FailedResolveStrategy::Error)
         .melt(&EnvTokens)?;
 
+    let melted_data = utils::request("1.10-ironman_melted.zip");
+    assert!(
+        eq(melted_data.as_slice(), out.data()),
+        "unexpected melted data"
+    );
+
     let file = Hoi4File::from_slice(out.data())?;
     let parsed_file = file.parse()?;
     let save: Hoi4Save = parsed_file.deserializer(&EnvTokens).deserialize()?;
@@ -99,4 +105,14 @@ fn test_ironman_roundtrip() -> Result<(), Box<dyn Error>> {
         String::from("1936.1.1.12")
     );
     Ok(())
+}
+
+fn eq(a: &[u8], b: &[u8]) -> bool {
+    for (ai, bi) in a.iter().zip(b.iter()) {
+        if ai != bi {
+            return false;
+        }
+    }
+
+    a.len() == b.len()
 }
