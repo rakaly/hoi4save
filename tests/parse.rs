@@ -53,17 +53,17 @@ fn test_hoi4_ironman() -> Result<(), Box<dyn Error>> {
 #[cfg(ironman)]
 #[test]
 fn test_normal_roundtrip() -> Result<(), Box<dyn Error>> {
+    use std::io::Cursor;
     let data = utils::request("1.10-normal.zip");
 
     let file = Hoi4File::from_slice(&data)?;
-    let parsed_file = file.parse()?;
-    let binary = parsed_file.as_binary().unwrap();
-    let out = binary
-        .melter()
+    let mut out = Cursor::new(Vec::new());
+    file.melter()
         .on_failed_resolve(hoi4save::FailedResolveStrategy::Error)
-        .melt(&EnvTokens)?;
+        .melt(&mut out, &EnvTokens)?;
 
-    let file = Hoi4File::from_slice(out.data())?;
+    let out = out.into_inner();
+    let file = Hoi4File::from_slice(&out)?;
     let parsed_file = file.parse()?;
     let save: Hoi4Save = parsed_file.deserializer(&EnvTokens).deserialize()?;
 
@@ -79,22 +79,21 @@ fn test_normal_roundtrip() -> Result<(), Box<dyn Error>> {
 #[cfg(ironman)]
 #[test]
 fn test_ironman_roundtrip() -> Result<(), Box<dyn Error>> {
+    use std::io::Cursor;
+
     let data = utils::request("1.10-ironman.zip");
     let file = Hoi4File::from_slice(&data)?;
-    let parsed_file = file.parse()?;
-    let binary = parsed_file.as_binary().unwrap();
-    let out = binary
-        .melter()
+    let mut out = Cursor::new(Vec::new());
+    file.melter()
         .on_failed_resolve(hoi4save::FailedResolveStrategy::Error)
-        .melt(&EnvTokens)?;
+        .melt(&mut out, &EnvTokens)?;
 
+    let out = out.into_inner();
     let melted_data = utils::request("1.10-ironman_melted.zip");
-    assert!(
-        eq(melted_data.as_slice(), out.data()),
-        "unexpected melted data"
-    );
+    std::fs::write("/tmp/out", &out).unwrap();
+    assert!(eq(melted_data.as_slice(), &out), "unexpected melted data");
 
-    let file = Hoi4File::from_slice(out.data())?;
+    let file = Hoi4File::from_slice(&out)?;
     let parsed_file = file.parse()?;
     let save: Hoi4Save = parsed_file.deserializer(&EnvTokens).deserialize()?;
 

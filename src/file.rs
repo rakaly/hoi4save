@@ -104,6 +104,13 @@ impl<'a> Hoi4File<'a> {
             }
         }
     }
+
+    pub fn melter(&self) -> Hoi4Melter<'a> {
+        match self.kind {
+            FileKind::Text(x) => Hoi4Melter::new_text(x),
+            FileKind::Binary(x) => Hoi4Melter::new_binary(x),
+        }
+    }
 }
 
 /// Contains the parsed Hoi4 file
@@ -216,10 +223,6 @@ impl<'data> Hoi4Binary<'data> {
         Hoi4BinaryDeserializer {
             deser: BinaryDeserializer::builder_flavor(Hoi4Flavor).from_tape(&self.tape, resolver),
         }
-    }
-
-    pub fn melter<'b>(&'b self) -> Hoi4Melter<'data, 'b> {
-        Hoi4Melter::new(&self.tape)
     }
 }
 
