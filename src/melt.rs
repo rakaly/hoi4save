@@ -1,38 +1,23 @@
-use crate::{flavor::Hoi4Flavor, Hoi4Date, Hoi4Error, Hoi4ErrorKind};
+use crate::{flavor::Hoi4Flavor, Encoding, Hoi4Date, Hoi4Error, Hoi4ErrorKind};
 use jomini::{
-    binary::{BinaryFlavor, FailedResolveStrategy, TokenResolver},
+    binary::{self, BinaryFlavor, FailedResolveStrategy, TokenReader, TokenResolver},
     common::PdsDate,
-    BinaryTape, BinaryToken, TextWriterBuilder,
+    TextWriterBuilder,
 };
-use std::collections::HashSet;
-
-#[derive(thiserror::Error, Debug)]
-pub(crate) enum MelterError {
-    #[error("{0}")]
-    Write(#[from] jomini::Error),
-
-    #[error("")]
-    UnknownToken { token_id: u16 },
-
-    #[error("")]
-    InvalidDate(i32),
-}
+use std::{
+    collections::HashSet,
+    io::{Read, Write},
+};
 
 /// Output from melting a binary save to plaintext
+#[derive(Debug, Default)]
 pub struct MeltedDocument {
-    data: Vec<u8>,
     unknown_tokens: HashSet<u16>,
 }
 
 impl MeltedDocument {
-    /// The converted plaintext data
-    pub fn into_data(self) -> Vec<u8> {
-        self.data
-    }
-
-    /// The converted plaintext data
-    pub fn data(&self) -> &[u8] {
-        self.data.as_slice()
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// The list of unknown tokens that the provided resolver accumulated
@@ -41,111 +26,182 @@ impl MeltedDocument {
     }
 }
 
-/// Convert a binary save to plaintext
-pub struct Hoi4Melter<'a, 'b> {
-    tape: &'b BinaryTape<'a>,
+#[derive(Debug)]
+enum MeltInput<'data> {
+    Text(&'data [u8]),
+    Binary(&'data [u8]),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MeltOptions {
     verbatim: bool,
     on_failed_resolve: FailedResolveStrategy,
 }
 
-impl<'a, 'b> Hoi4Melter<'a, 'b> {
-    pub(crate) fn new(tape: &'b BinaryTape<'a>) -> Self {
-        Hoi4Melter {
-            tape,
+impl Default for MeltOptions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl MeltOptions {
+    pub fn new() -> Self {
+        Self {
             verbatim: false,
             on_failed_resolve: FailedResolveStrategy::Ignore,
         }
     }
+}
+
+/// Convert a binary save to plaintext
+pub struct Hoi4Melter<'data> {
+    input: MeltInput<'data>,
+    options: MeltOptions,
+}
+
+impl<'data> Hoi4Melter<'data> {
+    pub(crate) fn new_text(input: &'data [u8]) -> Self {
+        Hoi4Melter {
+            input: MeltInput::Text(input),
+            options: MeltOptions::default(),
+        }
+    }
+
+    pub(crate) fn new_binary(input: &'data [u8]) -> Self {
+        Hoi4Melter {
+            input: MeltInput::Binary(input),
+            options: MeltOptions::default(),
+        }
+    }
 
     pub fn verbatim(&mut self, verbatim: bool) -> &mut Self {
-        self.verbatim = verbatim;
+        self.options.verbatim = verbatim;
         self
     }
 
     pub fn on_failed_resolve(&mut self, strategy: FailedResolveStrategy) -> &mut Self {
-        self.on_failed_resolve = strategy;
+        self.options.on_failed_resolve = strategy;
         self
     }
 
-    pub(crate) fn skip_value_idx(&self, token_idx: usize) -> usize {
-        self.tape
-            .tokens()
-            .get(token_idx + 1)
-            .map(|next_token| match next_token {
-                BinaryToken::Object(end) | BinaryToken::Array(end) => end + 1,
-                _ => token_idx + 2,
-            })
-            .unwrap_or(token_idx + 1)
+    pub fn input_encoding(&self) -> Encoding {
+        match &self.input {
+            MeltInput::Text(_) => Encoding::Plaintext,
+            MeltInput::Binary(_) => Encoding::Binary,
+        }
     }
 
-    pub fn melt<R>(&self, resolver: &R) -> Result<MeltedDocument, Hoi4Error>
+    pub fn melt<Writer, R>(
+        &mut self,
+        mut output: Writer,
+        resolver: &R,
+    ) -> Result<MeltedDocument, Hoi4Error>
     where
+        Writer: Write,
         R: TokenResolver,
     {
-        let out = melt(self, resolver).map_err(|e| match e {
-            MelterError::Write(x) => Hoi4ErrorKind::Writer(x),
-            MelterError::UnknownToken { token_id } => Hoi4ErrorKind::UnknownToken { token_id },
-            MelterError::InvalidDate(x) => Hoi4ErrorKind::InvalidDate(x),
-        })?;
-        Ok(out)
+        match &self.input {
+            MeltInput::Text(x) => {
+                output.write_all(b"HOI4txt")?;
+                output.write_all(x)?;
+                Ok(MeltedDocument::new())
+            }
+            MeltInput::Binary(x) => {
+                output.write_all(b"HOI4txt\n")?;
+                let result = melt(*x, &mut output, resolver, self.options)?;
+                output.write_all(b"\n")?;
+                Ok(result)
+            }
+        }
     }
 }
 
-pub(crate) fn melt<R>(melter: &Hoi4Melter, resolver: &R) -> Result<MeltedDocument, MelterError>
+pub(crate) fn melt<Reader, Writer, Resolver>(
+    input: Reader,
+    output: Writer,
+    resolver: Resolver,
+    options: MeltOptions,
+) -> Result<MeltedDocument, Hoi4Error>
 where
-    R: TokenResolver,
+    Reader: Read,
+    Writer: Write,
+    Resolver: TokenResolver,
 {
-    let flavor = Hoi4Flavor;
-    let mut out = Vec::with_capacity(melter.tape.tokens().len() * 10);
-    out.extend_from_slice(b"HOI4txt\n");
     let mut unknown_tokens = HashSet::new();
+    let mut reader = TokenReader::new(input);
+    let flavor = Hoi4Flavor;
 
     let mut wtr = TextWriterBuilder::new()
         .indent_char(b'\t')
         .indent_factor(1)
-        .from_writer(out);
-    let mut token_idx = 0;
+        .from_writer(output);
+
     let mut known_number = false;
     let mut known_date = false;
+    let mut quoted_buffer_enabled = false;
+    let mut quoted_buffer: Vec<u8> = Vec::new();
+    while let Some(token) = reader.next()? {
+        if quoted_buffer_enabled {
+            if matches!(token, binary::Token::Equal) {
+                wtr.write_unquoted(&quoted_buffer)?;
+            } else {
+                wtr.write_quoted(&quoted_buffer)?;
+            }
+            quoted_buffer.clear();
+            quoted_buffer_enabled = false;
+        }
 
-    let tokens = melter.tape.tokens();
-    while let Some(token) = tokens.get(token_idx) {
         match token {
-            BinaryToken::I32(x) => {
+            binary::Token::Open => wtr.write_start()?,
+            binary::Token::Close => wtr.write_end()?,
+            binary::Token::I32(x) => {
                 if known_number {
-                    wtr.write_i32(*x)?;
+                    wtr.write_i32(x)?;
                     known_number = false;
                 } else if known_date {
-                    if let Some(date) = Hoi4Date::from_binary(*x) {
+                    if let Some(date) = Hoi4Date::from_binary(x) {
                         wtr.write_date(date.game_fmt())?;
-                    } else if melter.on_failed_resolve != FailedResolveStrategy::Error {
-                        wtr.write_i32(*x)?;
+                    } else if options.on_failed_resolve != FailedResolveStrategy::Error {
+                        wtr.write_i32(x)?;
                     } else {
-                        return Err(MelterError::InvalidDate(*x));
+                        return Err(Hoi4Error::from(Hoi4ErrorKind::InvalidDate(x)));
                     }
                     known_date = false;
-                } else if let Some(date) = Hoi4Date::from_binary_heuristic(*x) {
+                } else if let Some(date) = Hoi4Date::from_binary_heuristic(x) {
                     wtr.write_date(date.game_fmt())?;
                 } else {
-                    wtr.write_i32(*x)?;
+                    wtr.write_i32(x)?;
                 }
             }
-            BinaryToken::Quoted(x) => {
-                if wtr.expecting_key() {
+            binary::Token::Quoted(x) => {
+                if wtr.at_unknown_start() {
+                    quoted_buffer_enabled = true;
+                    quoted_buffer.extend_from_slice(x.as_bytes());
+                } else if wtr.expecting_key() {
                     wtr.write_unquoted(x.as_bytes())?;
                 } else {
                     wtr.write_quoted(x.as_bytes())?;
                 }
             }
-            BinaryToken::F32(x) => wtr.write_f32(flavor.visit_f32(*x))?,
-            BinaryToken::F64(x) => wtr.write_f64(flavor.visit_f64(*x))?,
-            BinaryToken::Token(x) => match resolver.resolve(*x) {
+            binary::Token::Unquoted(x) => {
+                wtr.write_unquoted(x.as_bytes())?;
+            }
+            binary::Token::F32(x) => wtr.write_f32(flavor.visit_f32(x))?,
+            binary::Token::F64(x) => wtr.write_f64(flavor.visit_f64(x))?,
+            binary::Token::Id(x) => match resolver.resolve(x) {
                 Some(id) => {
-                    if !melter.verbatim
+                    if !options.verbatim
                         && matches!(id, "is_ironman" | "ironman")
                         && wtr.expecting_key()
                     {
-                        token_idx = melter.skip_value_idx(token_idx);
+                        let mut next = reader.read()?;
+                        if matches!(next, binary::Token::Equal) {
+                            next = reader.read()?;
+                        }
+
+                        if matches!(next, binary::Token::Open) {
+                            reader.skip_container()?;
+                        }
                         continue;
                     }
 
@@ -154,29 +210,34 @@ where
                     known_date = id == "date";
                     wtr.write_unquoted(id.as_bytes())?;
                 }
-                None => match melter.on_failed_resolve {
+                None => match options.on_failed_resolve {
                     FailedResolveStrategy::Error => {
-                        return Err(MelterError::UnknownToken { token_id: *x });
+                        return Err(Hoi4ErrorKind::UnknownToken { token_id: x }.into());
                     }
                     FailedResolveStrategy::Ignore if wtr.expecting_key() => {
-                        token_idx = melter.skip_value_idx(token_idx);
-                        continue;
+                        let mut next = reader.read()?;
+                        if matches!(next, binary::Token::Equal) {
+                            next = reader.read()?;
+                        }
+
+                        if matches!(next, binary::Token::Open) {
+                            reader.skip_container()?;
+                        }
                     }
                     _ => {
-                        unknown_tokens.insert(*x);
+                        unknown_tokens.insert(x);
                         write!(wtr, "__unknown_0x{:x}", x)?;
                     }
                 },
             },
-            x => wtr.write_binary(x)?,
+            binary::Token::Equal => wtr.write_operator(jomini::text::Operator::Equal)?,
+            binary::Token::U32(x) => wtr.write_u32(x)?,
+            binary::Token::U64(x) => wtr.write_u64(x)?,
+            binary::Token::Bool(x) => wtr.write_bool(x)?,
+            binary::Token::Rgb(x) => wtr.write_rgb(&x)?,
+            binary::Token::I64(x) => wtr.write_i64(x)?,
         }
-
-        token_idx += 1;
     }
 
-    wtr.inner().push(b'\n');
-    Ok(MeltedDocument {
-        data: wtr.into_inner(),
-        unknown_tokens,
-    })
+    Ok(MeltedDocument { unknown_tokens })
 }

@@ -1,3 +1,7 @@
+use std::io;
+
+use jomini::binary;
+
 /// A Hoi4 Error
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
@@ -24,13 +28,10 @@ impl From<Hoi4ErrorKind> for Hoi4Error {
 #[derive(thiserror::Error, Debug)]
 pub enum Hoi4ErrorKind {
     #[error("unable to parse due to: {0}")]
-    Parse(#[source] jomini::Error),
+    Parse(#[from] jomini::Error),
 
     #[error("unable to deserialize due to: {0}")]
     Deserialize(#[source] jomini::Error),
-
-    #[error("error while writing output: {0}")]
-    Writer(#[source] jomini::Error),
 
     #[error("unknown binary token encountered: {token_id:#x}")]
     UnknownToken { token_id: u16 },
@@ -46,6 +47,27 @@ pub enum Hoi4ErrorKind {
 
     #[error("country tags must contain only ascii letters")]
     CountryTagInvalidCharacters,
+
+    #[error("io error: {0}")]
+    Io(#[from] io::Error),
+}
+
+impl From<io::Error> for Hoi4Error {
+    fn from(value: io::Error) -> Self {
+        Self::from(Hoi4ErrorKind::from(value))
+    }
+}
+
+impl From<jomini::Error> for Hoi4Error {
+    fn from(value: jomini::Error) -> Self {
+        Self::from(Hoi4ErrorKind::from(value))
+    }
+}
+
+impl From<binary::ReaderError> for Hoi4Error {
+    fn from(value: binary::ReaderError) -> Self {
+        Self::from(jomini::Error::from(value))
+    }
 }
 
 #[cfg(test)]
