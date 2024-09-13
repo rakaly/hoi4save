@@ -80,7 +80,7 @@ impl<'a> Hoi4File<'a> {
             FileKind::Text(x) => Hoi4Text::from_raw(x)?.deserialize(),
             FileKind::Binary(x) => {
                 let save = Hoi4Flavor
-                    .deserialize_slice(&x, resolver)
+                    .deserialize_slice(x, resolver)
                     .map_err(Hoi4ErrorKind::Deserialize)?;
                 Ok(save)
             }
