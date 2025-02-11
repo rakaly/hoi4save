@@ -127,7 +127,7 @@ pub struct Hoi4ParsedFile<'a> {
     kind: Hoi4ParsedFileKind<'a>,
 }
 
-impl<'a> Hoi4ParsedFile<'a> {
+impl Hoi4ParsedFile<'_> {
     /// Returns the file as text
     pub fn as_text(&self) -> Option<&Hoi4Text> {
         match &self.kind {
@@ -236,7 +236,7 @@ pub struct Hoi4Deserializer<'data, 'tape, RES> {
     kind: Hoi4DeserializerKind<'data, 'tape, RES>,
 }
 
-impl<'data, 'tape, RES> Hoi4Deserializer<'data, 'tape, RES>
+impl<'data, RES> Hoi4Deserializer<'data, '_, RES>
 where
     RES: TokenResolver,
 {
@@ -263,7 +263,7 @@ pub struct Hoi4BinaryDeserializer<'data, 'tape, RES> {
     deser: BinaryDeserializer<'tape, 'data, 'tape, RES, Hoi4Flavor>,
 }
 
-impl<'data, 'tape, RES> Hoi4BinaryDeserializer<'data, 'tape, RES>
+impl<'data, RES> Hoi4BinaryDeserializer<'data, '_, RES>
 where
     RES: TokenResolver,
 {
