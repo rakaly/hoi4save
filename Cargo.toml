@@ -17,8 +17,9 @@ serde = { version = "1", features = ["derive"] }
 thiserror = "1"
 
 [dev-dependencies]
-zip = { version =  "0.6", default-features = false, features = ["deflate"] }
 attohttpc = "0.26"
+flate2 = { version = "1.0.29", default-features = false, features = ["zlib-rs"] }
+rawzip = "0.0.5"
 
 [profile.test]
 opt-level = 3

@@ -1,290 +1,348 @@
-use crate::{flavor::Hoi4Flavor, models::Hoi4Save, Encoding, Hoi4Error, Hoi4ErrorKind, Hoi4Melter};
-use jomini::{
-    binary::{BinaryFlavor, FailedResolveStrategy, TokenResolver},
-    text::ObjectReader,
-    BinaryDeserializer, BinaryTape, TextDeserializer, TextTape, Utf8Encoding,
+use std::{
+    collections::HashMap,
+    fs::File,
+    io::{Read, Write},
 };
-use serde::Deserialize;
+
+use crate::{
+    flavor::Hoi4Flavor, melt, models::Hoi4Save, Encoding, Hoi4Error, Hoi4ErrorKind, MeltOptions,
+    MeltedDocument,
+};
+use jomini::{
+    binary::TokenResolver, text::ObjectReader, BinaryDeserializer, TextDeserializer, TextTape,
+    Utf8Encoding,
+};
+use serde::de::DeserializeOwned;
 
 const TXT_HEADER: &[u8] = b"HOI4txt";
 const BIN_HEADER: &[u8] = b"HOI4bin";
 
-fn is_text(data: &[u8]) -> Option<&[u8]> {
-    let sentry = TXT_HEADER;
-    if data.get(..sentry.len()).map_or(false, |x| x == sentry) {
-        Some(&data[sentry.len()..])
-    } else {
-        None
-    }
+enum FileHeader {
+    Text,
+    Binary,
 }
 
-fn is_bin(data: &[u8]) -> Option<&[u8]> {
-    let sentry = BIN_HEADER;
-    if data.get(..sentry.len()).map_or(false, |x| x == sentry) {
-        Some(&data[sentry.len()..])
-    } else {
-        None
+fn file_header(data: &[u8]) -> Option<(FileHeader, &[u8])> {
+    if data.len() < TXT_HEADER.len() {
+        return None;
     }
-}
 
-enum FileKind<'a> {
-    Text(&'a [u8]),
-    Binary(&'a [u8]),
+    let (header, rest) = data.split_at(TXT_HEADER.len());
+    match header {
+        TXT_HEADER => Some((FileHeader::Text, rest)),
+        BIN_HEADER => Some((FileHeader::Binary, rest)),
+        _ => None,
+    }
 }
 
 /// Entrypoint for parsing HOI4 saves
 ///
 /// Only consumes enough data to determine encoding of the file
-pub struct Hoi4File<'a> {
-    kind: FileKind<'a>,
+pub struct Hoi4File {}
+
+impl Hoi4File {
+    /// Parse a HOI4 file from a slice of data
+    pub fn from_slice(data: &[u8]) -> Result<Hoi4SliceFile, Hoi4Error> {
+        match file_header(data) {
+            Some((FileHeader::Text, data)) => Ok(Hoi4SliceFile {
+                kind: Hoi4SliceFileKind::Text(Hoi4Text(data)),
+            }),
+            Some((FileHeader::Binary, data)) => Ok(Hoi4SliceFile {
+                kind: Hoi4SliceFileKind::Binary(Hoi4Binary(data)),
+            }),
+            None => Err(Hoi4Error::new(Hoi4ErrorKind::UnknownHeader)),
+        }
+    }
+
+    /// Parse a HOI4 file from a file
+    pub fn from_file(mut file: File) -> Result<Hoi4FsFile, Hoi4Error> {
+        let mut header = [0u8; TXT_HEADER.len()];
+        file.read_exact(&mut header)?;
+        match file_header(&header) {
+            Some((FileHeader::Text, _)) => Ok(Hoi4FsFile {
+                kind: Hoi4FsFileKind::Text(file),
+            }),
+            Some((FileHeader::Binary, _)) => Ok(Hoi4FsFile {
+                kind: Hoi4FsFileKind::Binary(Hoi4Binary(file)),
+            }),
+            None => Err(Hoi4Error::new(Hoi4ErrorKind::UnknownHeader)),
+        }
+    }
 }
 
-impl<'a> Hoi4File<'a> {
-    /// Creates a HOI4 file from a slice of data
-    pub fn from_slice(data: &[u8]) -> Result<Hoi4File, Hoi4Error> {
-        if let Some(text_data) = is_text(data) {
-            Ok(Hoi4File {
-                kind: FileKind::Text(text_data),
-            })
-        } else if let Some(bin_data) = is_bin(data) {
-            Ok(Hoi4File {
-                kind: FileKind::Binary(bin_data),
-            })
-        } else {
-            Err(Hoi4Error::new(Hoi4ErrorKind::UnknownHeader))
-        }
+#[derive(Debug, Clone)]
+pub enum Hoi4SliceFileKind<'a> {
+    Text(Hoi4Text<'a>),
+    Binary(Hoi4Binary<&'a [u8]>),
+}
+
+#[derive(Debug, Clone)]
+pub struct Hoi4SliceFile<'a> {
+    kind: Hoi4SliceFileKind<'a>,
+}
+
+impl<'a> Hoi4SliceFile<'a> {
+    pub fn kind(&self) -> &Hoi4SliceFileKind {
+        &self.kind
     }
 
-    /// Returns the detected decoding of the file
+    pub fn kind_mut(&'a mut self) -> &'a mut Hoi4SliceFileKind<'a> {
+        &mut self.kind
+    }
+
     pub fn encoding(&self) -> Encoding {
         match &self.kind {
-            FileKind::Text(_) => Encoding::Plaintext,
-            FileKind::Binary(_) => Encoding::Binary,
+            Hoi4SliceFileKind::Text(_) => Encoding::Plaintext,
+            Hoi4SliceFileKind::Binary(_) => Encoding::Binary,
         }
     }
 
-    /// Returns the size of the file
-    ///
-    /// The size includes the inflated size of the zip
-    pub fn size(&self) -> usize {
-        match &self.kind {
-            FileKind::Text(x) | FileKind::Binary(x) => x.len(),
-        }
-    }
-
-    pub fn parse_save<R>(&self, resolver: &R) -> Result<Hoi4Save, Hoi4Error>
+    pub fn parse_save<R>(&self, resolver: R) -> Result<Hoi4Save, Hoi4Error>
     where
         R: TokenResolver,
     {
         match &self.kind {
-            FileKind::Text(x) => Hoi4Text::from_raw(x)?.deserialize(),
-            FileKind::Binary(x) => {
-                let save = Hoi4Flavor
-                    .deserialize_slice(x, resolver)
-                    .map_err(Hoi4ErrorKind::Deserialize)?;
-                Ok(save)
-            }
+            Hoi4SliceFileKind::Text(data) => data.deserializer().deserialize(),
+            Hoi4SliceFileKind::Binary(data) => data.clone().deserializer(resolver).deserialize(),
         }
     }
 
-    /// Parse save
-    pub fn parse(&self) -> Result<Hoi4ParsedFile<'a>, Hoi4Error> {
+    pub fn melt<Resolver, Writer>(
+        &self,
+        options: MeltOptions,
+        resolver: Resolver,
+        mut output: Writer,
+    ) -> Result<MeltedDocument, Hoi4Error>
+    where
+        Resolver: TokenResolver,
+        Writer: Write,
+    {
         match &self.kind {
-            FileKind::Text(x) => {
-                let text = Hoi4Text::from_raw(x)?;
-                Ok(Hoi4ParsedFile {
-                    kind: Hoi4ParsedFileKind::Text(text),
-                })
+            Hoi4SliceFileKind::Text(data) => {
+                output.write_all(TXT_HEADER)?;
+                output.write_all(b"\n")?;
+                output.write_all(data.0)?;
+                Ok(MeltedDocument::new())
             }
-            FileKind::Binary(x) => {
-                let binary = Hoi4Binary::from_raw(x)?;
-                Ok(Hoi4ParsedFile {
-                    kind: Hoi4ParsedFileKind::Binary(binary),
-                })
+            Hoi4SliceFileKind::Binary(data) => {
+                output.write_all(TXT_HEADER)?;
+                output.write_all(b"\n")?;
+                let doc = melt::melt(data.0, &mut output, resolver, options)?;
+                output.write_all(b"\n")?;
+                Ok(doc)
             }
-        }
-    }
-
-    pub fn melter(&self) -> Hoi4Melter<'a> {
-        match self.kind {
-            FileKind::Text(x) => Hoi4Melter::new_text(x),
-            FileKind::Binary(x) => Hoi4Melter::new_binary(x),
         }
     }
 }
 
-/// Contains the parsed Hoi4 file
-pub enum Hoi4ParsedFileKind<'a> {
-    /// The Hoi4 file as text
-    Text(Hoi4Text<'a>),
-
-    /// The Hoi4 file as binary
-    Binary(Hoi4Binary<'a>),
+pub enum Hoi4FsFileKind {
+    Text(File),
+    Binary(Hoi4Binary<File>),
 }
 
-/// An Hoi4 file that has been parsed
-pub struct Hoi4ParsedFile<'a> {
-    kind: Hoi4ParsedFileKind<'a>,
+pub struct Hoi4FsFile {
+    kind: Hoi4FsFileKind,
 }
 
-impl Hoi4ParsedFile<'_> {
-    /// Returns the file as text
-    pub fn as_text(&self) -> Option<&Hoi4Text> {
-        match &self.kind {
-            Hoi4ParsedFileKind::Text(x) => Some(x),
-            _ => None,
-        }
-    }
-
-    /// Returns the file as binary
-    pub fn as_binary(&self) -> Option<&Hoi4Binary> {
-        match &self.kind {
-            Hoi4ParsedFileKind::Binary(x) => Some(x),
-            _ => None,
-        }
-    }
-
-    /// Returns the kind of file (binary or text)
-    pub fn kind(&self) -> &Hoi4ParsedFileKind {
+impl Hoi4FsFile {
+    pub fn kind(&self) -> &Hoi4FsFileKind {
         &self.kind
     }
 
-    /// Prepares the file for deserialization into a custom structure
-    pub fn deserializer<'b, RES>(&'b self, resolver: &'b RES) -> Hoi4Deserializer<RES>
+    pub fn kind_mut(&mut self) -> &mut Hoi4FsFileKind {
+        &mut self.kind
+    }
+
+    pub fn encoding(&self) -> Encoding {
+        match &self.kind {
+            Hoi4FsFileKind::Text(_) => Encoding::Plaintext,
+            Hoi4FsFileKind::Binary(_) => Encoding::Binary,
+        }
+    }
+
+    pub fn parse_save<RES>(&self, resolver: RES) -> Result<Hoi4Save, Hoi4Error>
     where
         RES: TokenResolver,
     {
         match &self.kind {
-            Hoi4ParsedFileKind::Text(x) => Hoi4Deserializer {
-                kind: Hoi4DeserializerKind::Text(x),
-            },
-            Hoi4ParsedFileKind::Binary(x) => Hoi4Deserializer {
-                kind: Hoi4DeserializerKind::Binary(x.deserializer(resolver)),
-            },
+            Hoi4FsFileKind::Text(file) => {
+                let reader = jomini::text::TokenReader::new(file);
+                let mut deserializer = TextDeserializer::from_utf8_reader(reader);
+                Ok(deserializer.deserialize()?)
+            }
+            Hoi4FsFileKind::Binary(file) => {
+                let mut deserializer =
+                    BinaryDeserializer::builder_flavor(Hoi4Flavor).from_reader(&file.0, &resolver);
+                let result = deserializer.deserialize()?;
+                Ok(result)
+            }
+        }
+    }
+
+    pub fn melt<Resolver, Writer>(
+        &mut self,
+        options: MeltOptions,
+        resolver: Resolver,
+        mut output: Writer,
+    ) -> Result<MeltedDocument, Hoi4Error>
+    where
+        Resolver: TokenResolver,
+        Writer: Write,
+    {
+        match &mut self.kind {
+            Hoi4FsFileKind::Text(file) => {
+                output.write_all(b"EU4txt\n")?;
+                std::io::copy(file, &mut output)?;
+                Ok(MeltedDocument::new())
+            }
+            Hoi4FsFileKind::Binary(file) => file.melt(options, resolver, output),
         }
     }
 }
 
+/// A Hoi4 text save
+#[derive(Debug, Clone)]
+pub struct Hoi4Text<'a>(&'a [u8]);
+
+impl Hoi4Text<'_> {
+    pub fn get_ref(&self) -> &[u8] {
+        self.0
+    }
+
+    pub fn deserializer(&self) -> Hoi4Modeller<&[u8], HashMap<u16, String>> {
+        Hoi4Modeller::from_reader(self.0, HashMap::new(), Encoding::Plaintext)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Hoi4Binary<R>(R);
+
+impl<R> Hoi4Binary<R>
+where
+    R: Read,
+{
+    pub fn get_ref(&self) -> &R {
+        &self.0
+    }
+
+    pub fn deserializer<RES>(&mut self, resolver: RES) -> Hoi4Modeller<&'_ mut R, RES> {
+        Hoi4Modeller {
+            reader: &mut self.0,
+            resolver,
+            encoding: Encoding::Binary,
+        }
+    }
+
+    pub fn melt<Resolver, Writer>(
+        &mut self,
+        options: MeltOptions,
+        resolver: Resolver,
+        mut output: Writer,
+    ) -> Result<MeltedDocument, Hoi4Error>
+    where
+        Resolver: TokenResolver,
+        Writer: Write,
+    {
+        melt::melt(&mut self.0, &mut output, resolver, options)
+    }
+}
+
 /// A parsed Hoi4 text document
-pub struct Hoi4Text<'a> {
+pub struct Hoi4ParsedText<'a> {
     tape: TextTape<'a>,
 }
 
-impl<'a> Hoi4Text<'a> {
+impl<'a> Hoi4ParsedText<'a> {
     pub fn from_slice(data: &'a [u8]) -> Result<Self, Hoi4Error> {
-        is_text(data)
+        file_header(data)
+            .filter(|(header, _)| matches!(header, FileHeader::Text))
+            .map(|(_, data)| data)
             .ok_or_else(|| Hoi4ErrorKind::UnknownHeader.into())
             .and_then(Self::from_raw)
     }
 
-    pub(crate) fn from_raw(data: &'a [u8]) -> Result<Self, Hoi4Error> {
+    pub fn from_raw(data: &'a [u8]) -> Result<Self, Hoi4Error> {
         let tape = TextTape::from_slice(data).map_err(Hoi4ErrorKind::Parse)?;
-        Ok(Hoi4Text { tape })
+        Ok(Hoi4ParsedText { tape })
     }
 
     pub fn reader(&self) -> ObjectReader<Utf8Encoding> {
         self.tape.utf8_reader()
     }
-
-    pub fn deserialize<T>(&self) -> Result<T, Hoi4Error>
-    where
-        T: Deserialize<'a>,
-    {
-        let deser = TextDeserializer::from_utf8_tape(&self.tape);
-        let result = deser.deserialize().map_err(Hoi4ErrorKind::Deserialize)?;
-        Ok(result)
-    }
 }
 
-/// A parsed Hoi4 binary document
-pub struct Hoi4Binary<'data> {
-    tape: BinaryTape<'data>,
+#[derive(Debug)]
+pub struct Hoi4Modeller<Reader, Resolver> {
+    reader: Reader,
+    resolver: Resolver,
+    encoding: Encoding,
 }
 
-impl<'data> Hoi4Binary<'data> {
-    pub fn from_slice(data: &'data [u8]) -> Result<Self, Hoi4Error> {
-        is_bin(data)
-            .ok_or_else(|| Hoi4ErrorKind::UnknownHeader.into())
-            .and_then(Self::from_raw)
-    }
-
-    pub(crate) fn from_raw(data: &'data [u8]) -> Result<Self, Hoi4Error> {
-        let tape = BinaryTape::from_slice(data).map_err(Hoi4ErrorKind::Parse)?;
-        Ok(Hoi4Binary { tape })
-    }
-
-    pub fn deserializer<'b, RES>(
-        &'b self,
-        resolver: &'b RES,
-    ) -> Hoi4BinaryDeserializer<'data, 'b, RES>
-    where
-        RES: TokenResolver,
-    {
-        Hoi4BinaryDeserializer {
-            deser: BinaryDeserializer::builder_flavor(Hoi4Flavor).from_tape(&self.tape, resolver),
+impl<Reader: Read, Resolver: TokenResolver> Hoi4Modeller<Reader, Resolver> {
+    pub fn from_reader(reader: Reader, resolver: Resolver, encoding: Encoding) -> Self {
+        Hoi4Modeller {
+            reader,
+            resolver,
+            encoding,
         }
     }
+
+    pub fn encoding(&self) -> Encoding {
+        self.encoding
+    }
+
+    pub fn deserialize<T>(&mut self) -> Result<T, Hoi4Error>
+    where
+        T: DeserializeOwned,
+    {
+        T::deserialize(self)
+    }
+
+    pub fn into_inner(self) -> Reader {
+        self.reader
+    }
 }
 
-enum Hoi4DeserializerKind<'data, 'tape, RES> {
-    Text(&'tape Hoi4Text<'data>),
-    Binary(Hoi4BinaryDeserializer<'data, 'tape, RES>),
-}
-
-/// A deserializer for custom structures
-pub struct Hoi4Deserializer<'data, 'tape, RES> {
-    kind: Hoi4DeserializerKind<'data, 'tape, RES>,
-}
-
-impl<'data, RES> Hoi4Deserializer<'data, '_, RES>
-where
-    RES: TokenResolver,
+impl<'de, 'a: 'de, Reader: Read, Resolver: TokenResolver> serde::de::Deserializer<'de>
+    for &'a mut Hoi4Modeller<Reader, Resolver>
 {
-    pub fn on_failed_resolve(&mut self, strategy: FailedResolveStrategy) -> &mut Self {
-        if let Hoi4DeserializerKind::Binary(x) = &mut self.kind {
-            x.on_failed_resolve(strategy);
-        }
-        self
-    }
+    type Error = Hoi4Error;
 
-    pub fn deserialize<T>(&self) -> Result<T, Hoi4Error>
+    fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value, Self::Error>
     where
-        T: Deserialize<'data>,
+        V: serde::de::Visitor<'de>,
     {
-        match &self.kind {
-            Hoi4DeserializerKind::Text(x) => x.deserialize(),
-            Hoi4DeserializerKind::Binary(x) => x.deserialize(),
+        Err(Hoi4Error::new(Hoi4ErrorKind::DeserializeImpl {
+            msg: String::from("only struct supported"),
+        }))
+    }
+
+    fn deserialize_struct<V>(
+        self,
+        name: &'static str,
+        fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Self::Error>
+    where
+        V: serde::de::Visitor<'de>,
+    {
+        if matches!(self.encoding, Encoding::Binary) {
+            use jomini::binary::BinaryFlavor;
+            let flavor = Hoi4Flavor;
+            let mut deser = flavor
+                .deserializer()
+                .from_reader(&mut self.reader, &self.resolver);
+            Ok(deser.deserialize_struct(name, fields, visitor)?)
+        } else {
+            let reader = jomini::text::TokenReader::new(&mut self.reader);
+            let mut deser = TextDeserializer::from_utf8_reader(reader);
+            Ok(deser.deserialize_struct(name, fields, visitor)?)
         }
     }
-}
 
-/// Deserializes binary data into custom structures
-pub struct Hoi4BinaryDeserializer<'data, 'tape, RES> {
-    deser: BinaryDeserializer<'tape, 'data, 'tape, RES, Hoi4Flavor>,
-}
-
-impl<'data, RES> Hoi4BinaryDeserializer<'data, '_, RES>
-where
-    RES: TokenResolver,
-{
-    pub fn on_failed_resolve(&mut self, strategy: FailedResolveStrategy) -> &mut Self {
-        self.deser.on_failed_resolve(strategy);
-        self
-    }
-
-    pub fn deserialize<T>(&self) -> Result<T, Hoi4Error>
-    where
-        T: Deserialize<'data>,
-    {
-        let result = self.deser.deserialize().map_err(|e| match e.kind() {
-            jomini::ErrorKind::Deserialize(e2) => match e2.kind() {
-                &jomini::DeserializeErrorKind::UnknownToken { token_id } => {
-                    Hoi4ErrorKind::UnknownToken { token_id }
-                }
-                _ => Hoi4ErrorKind::Deserialize(e),
-            },
-            _ => Hoi4ErrorKind::Deserialize(e),
-        })?;
-        Ok(result)
+    serde::forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+        bytes byte_buf option unit unit_struct newtype_struct seq tuple
+        tuple_struct map enum identifier ignored_any
     }
 }

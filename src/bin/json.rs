@@ -1,25 +1,33 @@
-use hoi4save::{file::Hoi4Text, BasicTokenResolver, Hoi4File};
-use std::{env, io::Cursor};
+use hoi4save::{
+    file::{Hoi4FsFileKind, Hoi4ParsedText},
+    BasicTokenResolver, Hoi4File,
+};
+use std::{env, io::Read};
 
-fn json_to_stdout(file: &Hoi4Text) {
+fn json_to_stdout(file: &Hoi4ParsedText) {
     let _ = file.reader().json().to_writer(std::io::stdout());
-}
-
-fn parsed_file_to_json(file: &Hoi4File) -> Result<(), Box<dyn std::error::Error>> {
-    let mut out = Cursor::new(Vec::new());
-    let file_data = std::fs::read("assets/hoi4.txt").unwrap_or_default();
-    let resolver = BasicTokenResolver::from_text_lines(file_data.as_slice())?;
-    file.melter().verbatim(true).melt(&mut out, &resolver)?;
-    json_to_stdout(&Hoi4Text::from_slice(out.get_ref())?);
-    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
-    let data = std::fs::read(&args[1]).unwrap();
-
-    let file = Hoi4File::from_slice(&data)?;
-    parsed_file_to_json(&file)?;
-
+    let file = std::fs::File::open(&args[1]).unwrap();
+    let mut file = Hoi4File::from_file(file)?;
+    match file.kind_mut() {
+        Hoi4FsFileKind::Text(x) => {
+            let mut buf = Vec::new();
+            x.read_to_end(&mut buf)?;
+            let text = Hoi4ParsedText::from_raw(&buf)?;
+            json_to_stdout(&text);
+        }
+        Hoi4FsFileKind::Binary(x) => {
+            let file_data = std::fs::read("assets/hoi4.txt").unwrap_or_default();
+            let resolver = BasicTokenResolver::from_text_lines(file_data.as_slice())?;
+            let melt_options = hoi4save::MeltOptions::new().verbatim(true);
+            let mut buf = Vec::new();
+            x.melt(melt_options, resolver, &mut buf)?;
+            let text = Hoi4ParsedText::from_slice(&buf)?;
+            json_to_stdout(&text);
+        }
+    }
     Ok(())
 }

@@ -1,4 +1,4 @@
-use crate::{flavor::Hoi4Flavor, Encoding, Hoi4Date, Hoi4Error, Hoi4ErrorKind};
+use crate::{flavor::Hoi4Flavor, Hoi4Date, Hoi4Error, Hoi4ErrorKind};
 use jomini::{
     binary::{self, BinaryFlavor, FailedResolveStrategy, TokenReader, TokenResolver},
     common::PdsDate,
@@ -26,12 +26,6 @@ impl MeltedDocument {
     }
 }
 
-#[derive(Debug)]
-enum MeltInput<'data> {
-    Text(&'data [u8]),
-    Binary(&'data [u8]),
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MeltOptions {
     verbatim: bool,
@@ -51,67 +45,15 @@ impl MeltOptions {
             on_failed_resolve: FailedResolveStrategy::Ignore,
         }
     }
-}
 
-/// Convert a binary save to plaintext
-pub struct Hoi4Melter<'data> {
-    input: MeltInput<'data>,
-    options: MeltOptions,
-}
-
-impl<'data> Hoi4Melter<'data> {
-    pub(crate) fn new_text(input: &'data [u8]) -> Self {
-        Hoi4Melter {
-            input: MeltInput::Text(input),
-            options: MeltOptions::default(),
-        }
+    pub fn verbatim(self, verbatim: bool) -> Self {
+        MeltOptions { verbatim, ..self }
     }
 
-    pub(crate) fn new_binary(input: &'data [u8]) -> Self {
-        Hoi4Melter {
-            input: MeltInput::Binary(input),
-            options: MeltOptions::default(),
-        }
-    }
-
-    pub fn verbatim(&mut self, verbatim: bool) -> &mut Self {
-        self.options.verbatim = verbatim;
-        self
-    }
-
-    pub fn on_failed_resolve(&mut self, strategy: FailedResolveStrategy) -> &mut Self {
-        self.options.on_failed_resolve = strategy;
-        self
-    }
-
-    pub fn input_encoding(&self) -> Encoding {
-        match &self.input {
-            MeltInput::Text(_) => Encoding::Plaintext,
-            MeltInput::Binary(_) => Encoding::Binary,
-        }
-    }
-
-    pub fn melt<Writer, R>(
-        &mut self,
-        mut output: Writer,
-        resolver: &R,
-    ) -> Result<MeltedDocument, Hoi4Error>
-    where
-        Writer: Write,
-        R: TokenResolver,
-    {
-        match &self.input {
-            MeltInput::Text(x) => {
-                output.write_all(b"HOI4txt")?;
-                output.write_all(x)?;
-                Ok(MeltedDocument::new())
-            }
-            MeltInput::Binary(x) => {
-                output.write_all(b"HOI4txt\n")?;
-                let result = melt(*x, &mut output, resolver, self.options)?;
-                output.write_all(b"\n")?;
-                Ok(result)
-            }
+    pub fn on_failed_resolve(self, on_failed_resolve: FailedResolveStrategy) -> Self {
+        MeltOptions {
+            on_failed_resolve,
+            ..self
         }
     }
 }

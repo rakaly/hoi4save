@@ -1,4 +1,4 @@
-use std::io;
+use std::{fmt, io};
 
 use jomini::binary;
 
@@ -36,6 +36,9 @@ pub enum Hoi4ErrorKind {
     #[error("unknown binary token encountered: {token_id:#x}")]
     UnknownToken { token_id: u16 },
 
+    #[error("unable to deserialize due to: {msg}. This shouldn't occur as this is a deserializer wrapper")]
+    DeserializeImpl { msg: String },
+
     #[error("expected the binary integer: {0} to be parsed as a date")]
     InvalidDate(i32),
 
@@ -50,6 +53,14 @@ pub enum Hoi4ErrorKind {
 
     #[error("io error: {0}")]
     Io(#[from] io::Error),
+}
+
+impl serde::de::Error for Hoi4Error {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
+        Hoi4Error::new(Hoi4ErrorKind::DeserializeImpl {
+            msg: msg.to_string(),
+        })
+    }
 }
 
 impl From<io::Error> for Hoi4Error {
