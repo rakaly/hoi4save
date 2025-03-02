@@ -19,7 +19,7 @@ thiserror = "1"
 [dev-dependencies]
 attohttpc = "0.26"
 flate2 = { version = "1.0.29", default-features = false, features = ["zlib-rs"] }
-rawzip = "0.0.5"
+rawzip = "0.1.0"
 
 [profile.test]
 opt-level = 3
