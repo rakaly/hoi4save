@@ -1,3 +1,7 @@
+## v0.4.0 - 2025-07-24
+
+- Complete overhaul of file parsing and handling
+
 ## v0.3.4 - 2023-05-14
 
 - Update melter to exclude `ironman` key from output
