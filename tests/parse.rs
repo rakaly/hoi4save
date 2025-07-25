@@ -1,5 +1,9 @@
-use hoi4save::{models::Hoi4Save, BasicTokenResolver, Encoding, Hoi4File, MeltOptions, PdsDate};
+use hoi4save::{
+    file::Hoi4SliceFileKind, models::Hoi4Save, BasicTokenResolver, Encoding, Hoi4Date, Hoi4File,
+    MeltOptions, PdsDate,
+};
 use jomini::binary::TokenResolver;
+use serde::Deserialize;
 use std::{error::Error, sync::LazyLock};
 
 mod utils;
@@ -16,6 +20,27 @@ fn test_hoi4_text() -> Result<(), Box<dyn Error>> {
     let save = file.parse_save(&*TOKENS)?;
     assert_eq!(file.encoding(), Encoding::Plaintext);
     assert_eq!(save.player, String::from("FRA"));
+    assert_eq!(
+        save.date.game_fmt().to_string(),
+        String::from("1936.1.1.12")
+    );
+    Ok(())
+}
+
+#[test]
+fn test_hoi4_text_custom_deserialization_file() -> Result<(), Box<dyn Error>> {
+    let file = utils::inflate(utils::request_file("1.10-normal-text.zip"));
+    let hoi4file = Hoi4File::from_slice(&file)?;
+    let Hoi4SliceFileKind::Text(hoi4txt) = hoi4file.kind() else {
+        panic!("expected text file kind");
+    };
+
+    #[derive(Deserialize, Debug, Clone)]
+    pub struct CustomHoi4Save {
+        pub date: Hoi4Date,
+    }
+
+    let save: CustomHoi4Save = hoi4txt.deserializer().deserialize()?;
     assert_eq!(
         save.date.game_fmt().to_string(),
         String::from("1936.1.1.12")
