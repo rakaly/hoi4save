@@ -39,7 +39,7 @@ pub struct Hoi4File {}
 
 impl Hoi4File {
     /// Parse a HOI4 file from a slice of data
-    pub fn from_slice(data: &[u8]) -> Result<Hoi4SliceFile, Hoi4Error> {
+    pub fn from_slice(data: &[u8]) -> Result<Hoi4SliceFile<'_>, Hoi4Error> {
         match file_header(data) {
             Some((FileHeader::Text, data)) => Ok(Hoi4SliceFile {
                 kind: Hoi4SliceFileKind::Text(Hoi4Text(data)),
@@ -79,7 +79,7 @@ pub struct Hoi4SliceFile<'a> {
 }
 
 impl<'a> Hoi4SliceFile<'a> {
-    pub fn kind(&self) -> &Hoi4SliceFileKind {
+    pub fn kind(&self) -> &Hoi4SliceFileKind<'a> {
         &self.kind
     }
 
@@ -308,7 +308,7 @@ impl<'a> Hoi4ParsedText<'a> {
         Ok(Hoi4ParsedText { tape })
     }
 
-    pub fn reader(&self) -> ObjectReader<Utf8Encoding> {
+    pub fn reader(&self) -> ObjectReader<'_, '_, Utf8Encoding> {
         self.tape.utf8_reader()
     }
 }
