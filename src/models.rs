@@ -1,4 +1,7 @@
-use crate::{de::deserialize_vec_pair, CountryTag, Hoi4Date};
+use crate::{
+    de::{deserialize_hashmap_f64, deserialize_vec_pair},
+    CountryTag, Hoi4Date,
+};
 use jomini::JominiDeserialize;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -17,6 +20,6 @@ pub struct Country {
     pub stability: f64,
     #[jomini(default)]
     pub war_support: f64,
-    #[jomini(default)]
+    #[jomini(default, deserialize_with = "deserialize_hashmap_f64")]
     pub variables: HashMap<String, f64>,
 }

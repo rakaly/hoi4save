@@ -150,3 +150,31 @@ fn eq(a: &[u8], b: &[u8]) -> bool {
 
     a.len() == b.len()
 }
+
+#[test]
+fn test_ironman_roundtrip_with_nulls() -> Result<(), Box<dyn Error>> {
+    if TOKENS.is_empty() {
+        return Ok(());
+    }
+
+    use std::io::Cursor;
+
+    let data = utils::inflate(utils::request_file("nulls.zip"));
+    let file = Hoi4File::from_slice(&data)?;
+    let mut out = Cursor::new(Vec::new());
+    let options = MeltOptions::new().on_failed_resolve(hoi4save::FailedResolveStrategy::Error);
+    file.melt(options, &*TOKENS, &mut out)?;
+
+    let out = out.into_inner();
+
+    let file = Hoi4File::from_slice(&out)?;
+    let save: Hoi4Save = file.parse_save(&*TOKENS)?;
+
+    assert_eq!(file.encoding(), Encoding::Plaintext);
+    assert_eq!(save.player, String::from("USA"));
+    assert_eq!(
+        save.date.game_fmt().to_string(),
+        String::from("1936.1.1.12")
+    );
+    Ok(())
+}
