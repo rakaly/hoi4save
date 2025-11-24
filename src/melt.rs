@@ -130,6 +130,21 @@ where
             }
             binary::Token::F32(x) => wtr.write_f32(flavor.visit_f32(x))?,
             binary::Token::F64(x) => wtr.write_f64(flavor.visit_f64(x))?,
+            binary::Token::Id(0) | binary::Token::Id(0xFFFF) => {
+                // Skip null tokens - they appear as padding in newer saves
+                if wtr.expecting_key() {
+                    // When Id(0) is a key, skip the entire key=value pair
+                    let mut next = reader.read()?;
+                    if matches!(next, binary::Token::Equal) {
+                        next = reader.read()?;
+                    }
+                    if matches!(next, binary::Token::Open) {
+                        reader.skip_container()?;
+                    }
+                }
+                // When Id(0) is a value or array element, just skip it
+                continue;
+            }
             binary::Token::Id(x) => match resolver.resolve(x) {
                 Some(id) => {
                     if !options.verbatim
