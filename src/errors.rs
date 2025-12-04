@@ -51,6 +51,9 @@ pub enum Hoi4ErrorKind {
     #[error("country tags must contain only ascii letters")]
     CountryTagInvalidCharacters,
 
+    #[error("unexpected end of file")]
+    Eof,
+
     #[error("io error: {0}")]
     Io(#[from] io::Error),
 }
