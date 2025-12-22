@@ -1,5 +1,6 @@
+use highway::HighwayHash;
 use hoi4save::{
-    file::Hoi4SliceFileKind, models::Hoi4Save, BasicTokenResolver, Encoding, Hoi4Date, Hoi4File,
+    file::Hoi4FsFileKind, models::Hoi4Save, BasicTokenResolver, Encoding, Hoi4Date, Hoi4File,
     MeltOptions, PdsDate,
 };
 use jomini::binary::TokenResolver;
@@ -15,8 +16,8 @@ static TOKENS: LazyLock<BasicTokenResolver> = LazyLock::new(|| {
 
 #[test]
 fn test_hoi4_text() -> Result<(), Box<dyn Error>> {
-    let data = utils::inflate(utils::request_file("1.10-normal-text.zip"));
-    let file = Hoi4File::from_slice(&data)?;
+    let file = utils::request_file("1.10-normal-text.hoi4");
+    let mut file = Hoi4File::from_file(file)?;
     let save = file.parse_save(&*TOKENS)?;
     assert_eq!(file.encoding(), Encoding::Plaintext);
     assert_eq!(save.player, String::from("FRA"));
@@ -29,9 +30,9 @@ fn test_hoi4_text() -> Result<(), Box<dyn Error>> {
 
 #[test]
 fn test_hoi4_text_custom_deserialization_file() -> Result<(), Box<dyn Error>> {
-    let file = utils::inflate(utils::request_file("1.10-normal-text.zip"));
-    let hoi4file = Hoi4File::from_slice(&file)?;
-    let Hoi4SliceFileKind::Text(hoi4txt) = hoi4file.kind() else {
+    let file = utils::request_file("1.10-normal-text.hoi4");
+    let hoi4file = Hoi4File::from_file(file)?;
+    let Hoi4FsFileKind::Text(hoi4txt) = hoi4file.kind() else {
         panic!("expected text file kind");
     };
 
@@ -40,7 +41,7 @@ fn test_hoi4_text_custom_deserialization_file() -> Result<(), Box<dyn Error>> {
         pub date: Hoi4Date,
     }
 
-    let save: CustomHoi4Save = hoi4txt.deserializer().deserialize()?;
+    let save: CustomHoi4Save = hoi4txt.as_ref().deserializer().deserialize()?;
     assert_eq!(
         save.date.game_fmt().to_string(),
         String::from("1936.1.1.12")
@@ -54,8 +55,8 @@ fn test_hoi4_normal_bin() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    let data = utils::inflate(utils::request_file("1.10-normal.zip"));
-    let file = Hoi4File::from_slice(&data)?;
+    let file = utils::request_file("1.10-normal.hoi4");
+    let mut file = Hoi4File::from_file(file)?;
     let save = file.parse_save(&*TOKENS)?;
     assert_eq!(file.encoding(), Encoding::Binary);
     assert_eq!(save.player, String::from("FRA"));
@@ -72,8 +73,8 @@ fn test_hoi4_ironman() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
-    let data = utils::inflate(utils::request_file("1.10-ironman.zip"));
-    let file = Hoi4File::from_slice(&data)?;
+    let file = utils::request_file("1.10-ironman.hoi4");
+    let mut file = Hoi4File::from_file(file)?;
     let save = file.parse_save(&*TOKENS)?;
     assert_eq!(file.encoding(), Encoding::Binary);
     assert_eq!(save.player, String::from("FRA"));
@@ -91,9 +92,9 @@ fn test_normal_roundtrip() -> Result<(), Box<dyn Error>> {
     }
 
     use std::io::Cursor;
-    let data = utils::inflate(utils::request_file("1.10-normal.zip"));
+    let file = utils::request_file("1.10-normal.hoi4");
 
-    let file = Hoi4File::from_slice(&data)?;
+    let mut file = Hoi4File::from_file(file)?;
     let mut out = Cursor::new(Vec::new());
     let options = MeltOptions::new().on_failed_resolve(hoi4save::FailedResolveStrategy::Error);
     file.melt(options, &*TOKENS, &mut out)?;
@@ -119,15 +120,22 @@ fn test_ironman_roundtrip() -> Result<(), Box<dyn Error>> {
 
     use std::io::Cursor;
 
-    let data = utils::inflate(utils::request_file("1.10-ironman.zip"));
-    let file = Hoi4File::from_slice(&data)?;
+    let file = utils::request_file("1.10-ironman.hoi4");
+    let mut file = Hoi4File::from_file(file)?;
     let mut out = Cursor::new(Vec::new());
     let options = MeltOptions::new().on_failed_resolve(hoi4save::FailedResolveStrategy::Error);
     file.melt(options, &*TOKENS, &mut out)?;
 
     let out = out.into_inner();
-    let melted_data = utils::inflate(utils::request_file("1.10-ironman_melted.zip"));
-    assert!(eq(melted_data.as_slice(), &out), "unexpected melted data");
+    let hash = highway::HighwayHasher::default().hash256(&out);
+    let checksum = format!(
+        "{:016x}{:016x}{:016x}{:016x}",
+        hash[0], hash[1], hash[2], hash[3]
+    );
+    assert_eq!(
+        &checksum,
+        "6e8f589e8d181c5205d051834617abbb7b90b4d16b3062d0ac0b85474fe41aa1"
+    );
 
     let file = Hoi4File::from_slice(&out)?;
     let save: Hoi4Save = file.parse_save(&*TOKENS)?;
@@ -141,16 +149,6 @@ fn test_ironman_roundtrip() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn eq(a: &[u8], b: &[u8]) -> bool {
-    for (ai, bi) in a.iter().zip(b.iter()) {
-        if ai != bi {
-            return false;
-        }
-    }
-
-    a.len() == b.len()
-}
-
 #[test]
 fn test_ironman_roundtrip_with_nulls() -> Result<(), Box<dyn Error>> {
     if TOKENS.is_empty() {
@@ -159,8 +157,8 @@ fn test_ironman_roundtrip_with_nulls() -> Result<(), Box<dyn Error>> {
 
     use std::io::Cursor;
 
-    let data = utils::inflate(utils::request_file("nulls.zip"));
-    let file = Hoi4File::from_slice(&data)?;
+    let file = utils::request_file("1.17-new-ironman-format.hoi4");
+    let mut file = Hoi4File::from_file(file)?;
     let mut out = Cursor::new(Vec::new());
     let options = MeltOptions::new().on_failed_resolve(hoi4save::FailedResolveStrategy::Error);
     file.melt(options, &*TOKENS, &mut out)?;

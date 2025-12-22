@@ -194,7 +194,7 @@ impl Hoi4FsFile {
         Resolver: TokenResolver,
         Writer: Write,
     {
-        output.write_all(b"HOI4txt")?;
+        output.write_all(b"HOI4txt\n")?;
         match &mut self.kind {
             Hoi4FsFileKind::Text(file) => {
                 std::io::copy(&mut file.0, &mut output)?;
