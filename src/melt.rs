@@ -1,6 +1,9 @@
-use crate::{flavor::Hoi4Flavor, Hoi4Date, Hoi4Error, Hoi4ErrorKind};
+use crate::{
+    flavor::{Hoi4Flavor, Hoi4Format, Hoi4Token},
+    Hoi4Date, Hoi4Error, Hoi4ErrorKind,
+};
 use jomini::{
-    binary::{BinaryFlavor, FailedResolveStrategy, TokenResolver},
+    binary::{ng::TokenReader, FailedResolveStrategy, TokenResolver},
     common::PdsDate,
     TextWriterBuilder,
 };
@@ -59,7 +62,7 @@ impl MeltOptions {
 }
 
 pub(crate) fn melt<Reader, Writer, Resolver>(
-    mut input: Reader,
+    input: Reader,
     output: Writer,
     resolver: Resolver,
     options: MeltOptions,
@@ -69,14 +72,11 @@ where
     Writer: Write,
     Resolver: TokenResolver,
 {
-    let mut buffer = Vec::new();
-    input.read_to_end(&mut buffer)?;
-    let mut data = buffer.as_slice();
-    let mut save_version_id = false;
-    let mut new_save_format = false;
-
+    let mut reader = TokenReader::new(
+        input,
+        Hoi4Format::new(&resolver).with_failed_resolve_strategy(options.on_failed_resolve),
+    );
     let mut unknown_tokens = HashSet::new();
-    let flavor = Hoi4Flavor;
 
     let mut wtr = TextWriterBuilder::new()
         .indent_char(b'\t')
@@ -88,13 +88,9 @@ where
     let mut quoted_buffer_enabled = false;
     let mut quoted_buffer: Vec<u8> = Vec::new();
 
-    while !data.is_empty() {
-        let (id, rest) = data.split_first_chunk::<2>().ok_or(Hoi4ErrorKind::Eof)?;
-        let id = u16::from_le_bytes(*id);
-        data = rest;
-
+    while let Some(token) = reader.next_token()? {
         if quoted_buffer_enabled {
-            if matches!(id, 0x0001) {
+            if matches!(token, Hoi4Token::Equal) {
                 wtr.write_unquoted(&quoted_buffer)?;
             } else {
                 wtr.write_quoted(&quoted_buffer)?;
@@ -103,31 +99,14 @@ where
             quoted_buffer_enabled = false;
         }
 
-        match id {
-            0x0001 => wtr.write_operator(jomini::text::Operator::Equal)?,
-            0x0003 => wtr.write_start()?,
-            0x0004 => wtr.write_end()?,
-            0x0014 => {
-                let (id, rest) = data.split_first_chunk::<4>().ok_or(Hoi4ErrorKind::Eof)?;
-                let val = u32::from_le_bytes(*id);
-                data = rest;
-                wtr.write_u32(val)?
-            }
-            0x029c => {
-                let (id, rest) = data.split_first_chunk::<8>().ok_or(Hoi4ErrorKind::Eof)?;
-                let val = u64::from_le_bytes(*id);
-                data = rest;
-                wtr.write_u64(val)?
-            }
-            0x000c => {
-                let (id, rest) = data.split_first_chunk::<4>().ok_or(Hoi4ErrorKind::Eof)?;
-                let x = i32::from_le_bytes(*id);
-                data = rest;
-
-                if save_version_id {
-                    new_save_format = x >= 30;
-                    wtr.write_i32(x)?;
-                } else if known_number {
+        match token {
+            Hoi4Token::Open => wtr.write_start()?,
+            Hoi4Token::Close => wtr.write_end()?,
+            Hoi4Token::Equal => wtr.write_operator(jomini::text::Operator::Equal)?,
+            Hoi4Token::U32(x) => wtr.write_u32(x)?,
+            Hoi4Token::U64(x) => wtr.write_u64(x)?,
+            Hoi4Token::I32(x) => {
+                if known_number {
                     wtr.write_i32(x)?;
                     known_number = false;
                 } else if known_date {
@@ -145,21 +124,11 @@ where
                     wtr.write_i32(x)?;
                 }
             }
-            0x000e => {
-                let (id, rest) = data.split_first().ok_or(Hoi4ErrorKind::Eof)?;
-                data = rest;
-                wtr.write_bool(*id != 0)?
-            }
-            0x000f | 0x0017 => {
-                let (len, rest) = data.split_first_chunk::<2>().ok_or(Hoi4ErrorKind::Eof)?;
-                let len = u16::from_le_bytes(*len);
-                let (x, rest) = rest
-                    .split_at_checked(len as usize)
-                    .ok_or(Hoi4ErrorKind::Eof)?;
-                data = rest;
-                if id == 0x0017 {
-                    wtr.write_unquoted(x)?;
-                } else if wtr.at_unknown_start() {
+            Hoi4Token::I64(x) => wtr.write_i64(x)?,
+            Hoi4Token::Bool(x) => wtr.write_bool(x)?,
+            Hoi4Token::Unquoted(x) => wtr.write_unquoted(x)?,
+            Hoi4Token::Quoted(x) => {
+                if wtr.at_unknown_start() {
                     quoted_buffer_enabled = true;
                     quoted_buffer.extend_from_slice(x);
                 } else if wtr.expecting_key() {
@@ -168,72 +137,33 @@ where
                     wtr.write_quoted(x)?;
                 }
             }
-            0x000d => {
-                if new_save_format {
-                    let (id, rest) = data.split_first_chunk::<8>().ok_or(Hoi4ErrorKind::Eof)?;
-                    let val = i64::from_le_bytes(*id);
-                    data = rest;
-                    wtr.write_i64(val / 100000)?
-                } else {
-                    let (id, rest) = data.split_first_chunk::<4>().ok_or(Hoi4ErrorKind::Eof)?;
-                    let val = flavor.visit_f32(*id);
-                    data = rest;
-                    wtr.write_f32(val)?
-                }
-            }
-            0x0167 => {
-                let (id, rest) = data.split_first_chunk::<8>().ok_or(Hoi4ErrorKind::Eof)?;
-                let val = flavor.visit_f64(*id);
-                data = rest;
-                wtr.write_f64(val)?
-            }
-            0x0317 => {
-                let (id, rest) = data.split_first_chunk::<8>().ok_or(Hoi4ErrorKind::Eof)?;
-                let val = i64::from_le_bytes(*id);
-                data = rest;
-                wtr.write_i64(val)?
-            }
-            id => match resolver.resolve(id) {
+            Hoi4Token::LegacyFixedPoint(x) => wtr.write_f32(Hoi4Flavor::decode_legacy_f32(x))?,
+            Hoi4Token::ModernFixedPoint(x) => wtr.write_i64(Hoi4Flavor::decode_modern_i64(x))?,
+            Hoi4Token::F64(x) => wtr.write_f64(x)?,
+            Hoi4Token::Field(x) => match resolver.resolve(x.0) {
                 Some(id) => {
                     if !options.verbatim
                         && matches!(id, "is_ironman" | "ironman")
                         && wtr.expecting_key()
                     {
-                        // skip equals
-                        let rest = data.get(2..).ok_or(Hoi4ErrorKind::Eof)?;
-
-                        let (token_id, rest) =
-                            rest.split_first_chunk::<2>().ok_or(Hoi4ErrorKind::Eof)?;
-                        let id = u16::from_le_bytes(*token_id);
-
-                        // skip i32
-                        if id == 0x000c {
-                            data = rest.get(4..).ok_or(Hoi4ErrorKind::Eof)?;
-                            continue;
-                        } else if id == 0x000f {
-                            // get str len
-                            let (len, rest) =
-                                rest.split_first_chunk::<2>().ok_or(Hoi4ErrorKind::Eof)?;
-                            let len = u16::from_le_bytes(*len);
-
-                            data = rest.get(len as usize..).ok_or(Hoi4ErrorKind::Eof)?;
-                            continue;
+                        if matches!(reader.read_token()?, Hoi4Token::Equal) {
+                            reader.skip_value()?;
                         }
+                        continue;
                     }
 
                     known_number =
                         id.ends_with("seed") || matches!(id, "total" | "available" | "locked");
                     known_date = id == "date";
-                    save_version_id = id == "save_version";
                     wtr.write_unquoted(id.as_bytes())?;
                 }
                 None => match options.on_failed_resolve {
                     FailedResolveStrategy::Error => {
-                        return Err(Hoi4ErrorKind::UnknownToken { token_id: id }.into());
+                        return Err(Hoi4ErrorKind::UnknownToken { token_id: x.0 }.into());
                     }
                     _ => {
-                        unknown_tokens.insert(id);
-                        write!(wtr, "__unknown_0x{:x}", id)?;
+                        unknown_tokens.insert(x.0);
+                        write!(wtr, "__unknown_0x{:x}", x.0)?;
                     }
                 },
             },
