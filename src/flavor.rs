@@ -62,7 +62,7 @@ impl BinaryFlavor for Hoi4Flavor {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Hoi4Token<'a> {
+pub enum Hoi4Token<'a> {
     Open,
     Close,
     Equal,
@@ -79,7 +79,7 @@ pub(crate) enum Hoi4Token<'a> {
     F64(f64),
 }
 
-pub(crate) struct Hoi4Format<R> {
+pub struct Hoi4Format<R> {
     resolver: R,
     failed_resolve_strategy: FailedResolveStrategy,
     pending_save_version: bool,
@@ -87,7 +87,7 @@ pub(crate) struct Hoi4Format<R> {
 }
 
 impl<R: TokenResolver> Hoi4Format<R> {
-    pub(crate) fn new(resolver: R) -> Self {
+    pub fn new(resolver: R) -> Self {
         Self {
             resolver,
             failed_resolve_strategy: FailedResolveStrategy::Error,
@@ -96,7 +96,7 @@ impl<R: TokenResolver> Hoi4Format<R> {
         }
     }
 
-    pub(crate) fn with_failed_resolve_strategy(
+    pub fn with_failed_resolve_strategy(
         mut self,
         failed_resolve_strategy: FailedResolveStrategy,
     ) -> Self {

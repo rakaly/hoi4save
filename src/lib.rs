@@ -57,5 +57,6 @@ pub use errors::*;
 pub use extraction::*;
 #[doc(inline)]
 pub use file::Hoi4File;
+pub use flavor::Hoi4Format;
 pub use jomini::binary::{BasicTokenResolver, FailedResolveStrategy};
 pub use melt::*;
