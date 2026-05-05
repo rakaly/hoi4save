@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 #[derive(JominiDeserialize, Debug, Clone, Serialize)]
 pub struct Hoi4Save {
-    pub player: String,
+    pub player: Option<String>,
     pub date: Hoi4Date,
     #[jomini(default, deserialize_with = "deserialize_vec_pair")]
     pub countries: Vec<(CountryTag, Country)>,

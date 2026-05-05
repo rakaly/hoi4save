@@ -20,7 +20,7 @@ fn test_hoi4_text() -> Result<(), Box<dyn Error>> {
     let mut file = Hoi4File::from_file(file)?;
     let save = file.parse_save(&*TOKENS)?;
     assert_eq!(file.encoding(), Encoding::Plaintext);
-    assert_eq!(save.player, String::from("FRA"));
+    assert_eq!(save.player.as_deref(), Some("FRA"));
     assert_eq!(
         save.date.game_fmt().to_string(),
         String::from("1936.1.1.12")
@@ -59,7 +59,7 @@ fn test_hoi4_normal_bin() -> Result<(), Box<dyn Error>> {
     let mut file = Hoi4File::from_file(file)?;
     let save = file.parse_save(&*TOKENS)?;
     assert_eq!(file.encoding(), Encoding::Binary);
-    assert_eq!(save.player, String::from("FRA"));
+    assert_eq!(save.player.as_deref(), Some("FRA"));
     assert_eq!(
         save.date.game_fmt().to_string(),
         String::from("1936.1.1.12")
@@ -77,7 +77,7 @@ fn test_hoi4_ironman() -> Result<(), Box<dyn Error>> {
     let mut file = Hoi4File::from_file(file)?;
     let save = file.parse_save(&*TOKENS)?;
     assert_eq!(file.encoding(), Encoding::Binary);
-    assert_eq!(save.player, String::from("FRA"));
+    assert_eq!(save.player.as_deref(), Some("FRA"));
     assert_eq!(
         save.date.game_fmt().to_string(),
         String::from("1936.1.1.12")
@@ -104,7 +104,7 @@ fn test_normal_roundtrip() -> Result<(), Box<dyn Error>> {
     let save: Hoi4Save = file.parse_save(&*TOKENS)?;
 
     assert_eq!(file.encoding(), Encoding::Plaintext);
-    assert_eq!(save.player, String::from("FRA"));
+    assert_eq!(save.player.as_deref(), Some("FRA"));
     assert_eq!(
         save.date.game_fmt().to_string(),
         String::from("1936.1.1.12")
@@ -141,7 +141,7 @@ fn test_ironman_roundtrip() -> Result<(), Box<dyn Error>> {
     let save: Hoi4Save = file.parse_save(&*TOKENS)?;
 
     assert_eq!(file.encoding(), Encoding::Plaintext);
-    assert_eq!(save.player, String::from("FRA"));
+    assert_eq!(save.player.as_deref(), Some("FRA"));
     assert_eq!(
         save.date.game_fmt().to_string(),
         String::from("1936.1.1.12")
@@ -169,7 +169,7 @@ fn test_ironman_roundtrip_with_nulls() -> Result<(), Box<dyn Error>> {
     let save: Hoi4Save = file.parse_save(&*TOKENS)?;
 
     assert_eq!(file.encoding(), Encoding::Plaintext);
-    assert_eq!(save.player, String::from("USA"));
+    assert_eq!(save.player.as_deref(), Some("USA"));
     assert_eq!(
         save.date.game_fmt().to_string(),
         String::from("1936.1.1.12")
