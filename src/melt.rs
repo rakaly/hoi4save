@@ -173,7 +173,7 @@ where
                     let (id, rest) = data.split_first_chunk::<8>().ok_or(Hoi4ErrorKind::Eof)?;
                     let val = i64::from_le_bytes(*id);
                     data = rest;
-                    wtr.write_i64(val / 100000)?
+                    wtr.write_f64(val as f64 / 100000.0)?
                 } else {
                     let (id, rest) = data.split_first_chunk::<4>().ok_or(Hoi4ErrorKind::Eof)?;
                     let val = flavor.visit_f32(*id);

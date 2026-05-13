@@ -150,6 +150,33 @@ fn test_ironman_roundtrip() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
+fn test_comp_bin_melt_checksum() -> Result<(), Box<dyn Error>> {
+    if TOKENS.is_empty() {
+        return Ok(());
+    }
+
+    use std::io::Cursor;
+
+    let file = utils::request_file("comp_bin.hoi4");
+    let mut file = Hoi4File::from_file(file)?;
+    let mut out = Cursor::new(Vec::new());
+    let options = MeltOptions::new().on_failed_resolve(hoi4save::FailedResolveStrategy::Error);
+    file.melt(options, &*TOKENS, &mut out)?;
+
+    let out = out.into_inner();
+    let hash = highway::HighwayHasher::default().hash256(&out);
+    let checksum = format!(
+        "{:016x}{:016x}{:016x}{:016x}",
+        hash[0], hash[1], hash[2], hash[3]
+    );
+    assert_eq!(
+        &checksum,
+        "8fbd2292046f67eb76aa50dcddc79aa75d8bee25ef7088c1aaff3d0882a48838"
+    );
+    Ok(())
+}
+
+#[test]
 fn test_ironman_roundtrip_with_nulls() -> Result<(), Box<dyn Error>> {
     if TOKENS.is_empty() {
         return Ok(());
