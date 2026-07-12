@@ -1,4 +1,7 @@
-use crate::{flavor::Hoi4Flavor, Hoi4Date, Hoi4Error, Hoi4ErrorKind};
+use crate::{
+    flavor::{Hoi4BinaryFormat, Hoi4Flavor},
+    Hoi4Date, Hoi4Error, Hoi4ErrorKind,
+};
 use jomini::{
     binary::{BinaryFlavor, FailedResolveStrategy, TokenResolver},
     common::PdsDate,
@@ -73,10 +76,10 @@ where
     input.read_to_end(&mut buffer)?;
     let mut data = buffer.as_slice();
     let mut save_version_id = false;
-    let mut new_save_format = false;
 
     let mut unknown_tokens = HashSet::new();
     let flavor = Hoi4Flavor;
+    let mut format = Hoi4BinaryFormat::new(&resolver);
 
     let mut wtr = TextWriterBuilder::new()
         .indent_char(b'\t')
@@ -125,7 +128,7 @@ where
                 data = rest;
 
                 if save_version_id {
-                    new_save_format = x >= 30;
+                    format.observe_i32(x);
                     wtr.write_i32(x)?;
                 } else if known_number {
                     wtr.write_i32(x)?;
@@ -169,11 +172,11 @@ where
                 }
             }
             0x000d => {
-                if new_save_format {
+                if format.modern_f32() {
                     let (id, rest) = data.split_first_chunk::<8>().ok_or(Hoi4ErrorKind::Eof)?;
-                    let val = i64::from_le_bytes(*id);
+                    let val = Hoi4Flavor::decode_modern_f64(*id);
                     data = rest;
-                    wtr.write_f64(val as f64 / 100000.0)?
+                    wtr.write_f64(val)?
                 } else {
                     let (id, rest) = data.split_first_chunk::<4>().ok_or(Hoi4ErrorKind::Eof)?;
                     let val = flavor.visit_f32(*id);
@@ -195,6 +198,7 @@ where
             }
             id => match resolver.resolve(id) {
                 Some(id) => {
+                    format.observe_key(if id == "save_version" { 0x349d } else { 0 });
                     if !options.verbatim
                         && matches!(id, "is_ironman" | "ironman")
                         && wtr.expecting_key()

@@ -1,9 +1,9 @@
 use highway::HighwayHash;
 use hoi4save::{
-    file::Hoi4FsFileKind, models::Hoi4Save, BasicTokenResolver, Encoding, Hoi4Date, Hoi4File,
-    MeltOptions, PdsDate,
+    file::Hoi4FsFileKind, models::Hoi4Save, BasicTokenResolver, Encoding, Hoi4BinaryFormat,
+    Hoi4Date, Hoi4File, MeltOptions, PdsDate,
 };
-use jomini::binary::TokenResolver;
+use jomini::binary::{BinaryFormatDeserializer, TokenResolver};
 use serde::Deserialize;
 use std::{error::Error, sync::LazyLock};
 
@@ -81,6 +81,69 @@ fn test_hoi4_ironman() -> Result<(), Box<dyn Error>> {
     assert_eq!(
         save.date.game_fmt().to_string(),
         String::from("1936.1.1.12")
+    );
+    Ok(())
+}
+
+#[test]
+fn test_hoi4_new_binary_format() -> Result<(), Box<dyn Error>> {
+    if TOKENS.is_empty() {
+        return Ok(());
+    }
+
+    let file = utils::request_file("1.17-new-ironman-format.hoi4");
+    let mut file = Hoi4File::from_file(file)?;
+    let save = file.parse_save(&*TOKENS)?;
+    assert_eq!(file.encoding(), Encoding::Binary);
+    assert_eq!(save.player.as_deref(), Some("USA"));
+    assert_eq!(save.date.game_fmt().to_string(), "1936.1.1.12");
+    Ok(())
+}
+
+#[test]
+fn test_skip_modern_fixed_point_in_nested_value() -> Result<(), Box<dyn Error>> {
+    #[derive(Debug, Deserialize, PartialEq)]
+    struct PlayerOnly {
+        player: String,
+    }
+
+    const SAVE_VERSION: u16 = 0x349d;
+    const IGNORED: u16 = 0x4000;
+    const VALUE: u16 = 0x4001;
+    const PLAYER: u16 = 0x4002;
+
+    let mut data = Vec::new();
+    data.extend_from_slice(&SAVE_VERSION.to_le_bytes());
+    data.extend_from_slice(&0x000c_u16.to_le_bytes());
+    data.extend_from_slice(&30_i32.to_le_bytes());
+    data.extend_from_slice(&IGNORED.to_le_bytes());
+    data.extend_from_slice(&0x0003_u16.to_le_bytes());
+    data.extend_from_slice(&VALUE.to_le_bytes());
+    data.extend_from_slice(&0x000d_u16.to_le_bytes());
+    // The high four bytes begin with a CLOSE lexeme. A legacy four-byte skip
+    // therefore terminates the ignored container early and desynchronizes.
+    data.extend_from_slice(&[1, 2, 3, 4, 4, 0, 9, 9]);
+    data.extend_from_slice(&0x0004_u16.to_le_bytes());
+    data.extend_from_slice(&PLAYER.to_le_bytes());
+    data.extend_from_slice(&0x000f_u16.to_le_bytes());
+    data.extend_from_slice(&3_u16.to_le_bytes());
+    data.extend_from_slice(b"USA");
+
+    let resolver = [
+        (SAVE_VERSION, "save_version"),
+        (IGNORED, "ignored"),
+        (VALUE, "value"),
+        (PLAYER, "player"),
+    ]
+    .into_iter()
+    .collect::<std::collections::HashMap<_, _>>();
+    let mut deser = BinaryFormatDeserializer::from_slice(&data, Hoi4BinaryFormat::new(&resolver));
+    let actual: PlayerOnly = deser.deserialize()?;
+    assert_eq!(
+        actual,
+        PlayerOnly {
+            player: "USA".into()
+        }
     );
     Ok(())
 }

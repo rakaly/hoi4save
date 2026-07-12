@@ -13,7 +13,7 @@ let parsed_file = file.parse()?;
 let resolver = HashMap::<u16, &str>::new();
 let save: Hoi4Save = parsed_file.deserializer().build(&resolver)?;
 assert_eq!(file.encoding(), Encoding::Plaintext);
-assert_eq!(save.player.as_deref(), Some("FRA"));
+assert_eq!(save.player, String::from("FRA"));
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
 
@@ -57,5 +57,6 @@ pub use errors::*;
 pub use extraction::*;
 #[doc(inline)]
 pub use file::Hoi4File;
+pub use flavor::Hoi4BinaryFormat;
 pub use jomini::binary::{BasicTokenResolver, FailedResolveStrategy};
 pub use melt::*;
