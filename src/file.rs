@@ -5,10 +5,14 @@ use std::{
 };
 
 use crate::{
-    flavor::Hoi4Flavor, melt, models::Hoi4Save, Encoding, Hoi4Error, Hoi4ErrorKind, MeltOptions,
-    MeltedDocument,
+    flavor::Hoi4BinaryFormat, melt, models::Hoi4Save, Encoding, Hoi4Error, Hoi4ErrorKind,
+    MeltOptions, MeltedDocument,
 };
-use jomini::{binary::TokenResolver, text::ObjectReader, TextDeserializer, TextTape, Utf8Encoding};
+use jomini::{
+    binary::{BinaryFormatDeserializer, TokenResolver},
+    text::ObjectReader,
+    TextDeserializer, TextTape, Utf8Encoding,
+};
 use serde::de::DeserializeOwned;
 
 const TXT_HEADER: &[u8] = b"HOI4txt";
@@ -368,11 +372,10 @@ impl<'de, 'a: 'de, Resolver: TokenResolver> serde::de::Deserializer<'de>
         V: serde::de::Visitor<'de>,
     {
         if matches!(self.encoding, Encoding::Binary) {
-            use jomini::binary::BinaryFlavor;
-            let flavor = Hoi4Flavor;
-            let mut deser = flavor
-                .deserializer()
-                .from_reader(&mut self.reader, &self.resolver);
+            let mut deser = BinaryFormatDeserializer::from_reader(
+                &mut self.reader,
+                Hoi4BinaryFormat::new(&self.resolver),
+            );
             Ok(deser.deserialize_struct(name, fields, visitor)?)
         } else {
             let reader = jomini::text::TokenReader::new(&mut self.reader);
