@@ -1,5 +1,7 @@
 ![ci](https://github.com/rakaly/hoi4save/workflows/ci/badge.svg) [![](https://docs.rs/hoi4save/badge.svg)](https://docs.rs/hoi4save) [![Version](https://img.shields.io/crates/v/hoi4save.svg?style=flat-square)](https://crates.io/crates/hoi4save)
 
+**This repo has been consolidated into the main [jomini repo](https://github.com/rakaly/jomini)**
+
 # HOI4 Save
 
 HOI4 Save is a library to ergonomically work with Hearts of Iron IV saves (plaintext + binary).
